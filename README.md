@@ -1,0 +1,1 @@
+Build a personal interview prep web app as a single self-contained HTML file plus JSON data files. No build step, no framework, no backend. Vanilla JavaScript only.
