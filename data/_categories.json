@@ -33,5 +33,15 @@
     "id": "aws",
     "name": "Amazon Web Services",
     "icon": "☁️"
+  },
+  {
+    "id": "kubernetes",
+    "name": "Kubernetes",
+    "icon": "☸️"
+  },
+  {
+    "id": "spark-stream",
+    "name": "Spark Streaming",
+    "icon": "🌊"
   }
 ]
