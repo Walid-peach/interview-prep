@@ -13,5 +13,15 @@
     "id": "airflow",
     "name": "Apache Airflow",
     "icon": "🌬️"
+  },
+  {
+    "id": "terraform",
+    "name": "Terraform",
+    "icon": "🌍"
+  },
+  {
+    "id": "kafka",
+    "name": "Apache Kafka",
+    "icon": "🐿️"
   }
 ]

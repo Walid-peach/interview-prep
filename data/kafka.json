@@ -1,0 +1,142 @@
+[
+  {
+    "id": "kafka-001",
+    "question": "What happens if you assign 10 consumers to a Consumer Group reading from a topic with only 5 partitions?",
+    "answer": "5 consumers will be assigned one partition each, and the other 5 will remain idle. A single partition can only be consumed by **one consumer within the same consumer group** at any given time. This restriction exists to maintain strict ordering guarantees within the partition. If you want all 10 consumers to actively process data concurrently, you must increase the topic's partition count to at least 10.\n\n```bash\n# Check partition assignment\nkafka-consumer-groups.sh --bootstrap-server broker:9092 --describe --group my_etl_group\n```\n\n*Gotcha: Having idle consumers is actually a common high-availability pattern; if an active consumer crashes, an idle one will immediately take over its partition during the next rebalance.*",
+    "difficulty": "easy",
+    "tags": ["consumer-groups", "partitions"]
+  },
+  {
+    "id": "kafka-002",
+    "question": "Explain the difference between log compaction and standard time-based retention in Kafka.",
+    "answer": "Time-based retention (`log.retention.hours`, default 168 hours/7 days) deletes log segments older than the threshold, regardless of their content. \n\n**Log compaction** (`cleanup.policy=compact`) keeps the *latest* message for every unique key within the topic forever. Background threads periodically scan the topic and delete older records that have the same key as a newer record. \n\nThis is highly useful for building materialized views, state tables, or CDC (Change Data Capture) pipelines where downstream consumers only care about the latest state of an entity (e.g., a user's current address), rather than the entire historical log of changes.\n\n*Follow-up they'll probably ask: How do you completely delete a record with a specific key in a compacted topic? (Answer: Send a tombstone message with a null payload).* ",
+    "difficulty": "easy",
+    "tags": ["retention", "compaction"]
+  },
+  {
+    "id": "kafka-003",
+    "question": "What is the role of ZooKeeper in older Kafka clusters, and what replaces it in modern versions?",
+    "answer": "ZooKeeper acts as the centralized coordinator for the distributed Kafka brokers. It manages cluster metadata, detects broker failures via heartbeats, and handles leader elections for partitions. \n\nIn modern Kafka versions (production-ready since 3.3), ZooKeeper is replaced by **KRaft** (Kafka Raft metadata mode). KRaft moves metadata management into Kafka itself using an internal topic (`__cluster_metadata`). This removes the dependency on an external system, simplifies operations, allows clusters to scale to millions of partitions, and drastically reduces partition recovery time during controller failovers.\n\n*Gotcha: When migrating an existing cluster from ZooKeeper to KRaft, it requires a careful multi-step rolling upgrade process; you cannot simply flip a switch.*",
+    "difficulty": "easy",
+    "tags": ["architecture", "kraft"]
+  },
+  {
+    "id": "kafka-004",
+    "question": "What is a Kafka Producer's `acks` configuration, and what does `acks=all` mean?",
+    "answer": "The `acks` setting determines how many replicas must acknowledge a write before the producer considers it successful. \n\n- `acks=0` is fire-and-forget. The producer never waits for an ack (high throughput, high data loss risk).\n- `acks=1` means the partition leader acknowledged it. Data is lost if the leader crashes before replicating.\n- `acks=all` (or `-1`) means the leader and all followers in the **In-Sync Replicas (ISR)** list have acknowledged the write. It provides the highest durability guarantee, preventing data loss if the leader node crashes immediately after acknowledging.\n\n```python\nproducer = KafkaProducer(\n    bootstrap_servers='broker:9092',\n    acks='all',\n    retries=5\n)\n```\n\n*Follow-up they'll probably ask: Does `acks=all` guarantee data won't be lost if the entire cluster loses power simultaneously?*",
+    "difficulty": "easy",
+    "tags": ["producer", "durability"]
+  },
+  {
+    "id": "kafka-005",
+    "question": "How do `acks=all` and `min.insync.replicas` work together, and what happens if the cluster cannot meet the minimum?",
+    "answer": "`acks=all` ensures all nodes currently in the ISR (In-Sync Replicas) list write the message. However, if a topic has a replication factor of 3 and two brokers crash, the ISR shrinks to 1 (just the leader). `acks=all` would still succeed, writing only to one node, which is a durability risk.\n\n`min.insync.replicas` sets a floor (e.g., set to 2). If the ISR size drops below 2, the producer will receive a `NotEnoughReplicasException` when trying to write. This guarantees data is written to at least two physical nodes before moving on, prioritizing consistency over availability.\n\n```bash\n# Set min ISR for a critical topic\nkafka-configs.sh --bootstrap-server broker:9092 --alter \\\n  --entity-type topics --entity-name financial_ledgers \\\n  --add-config min.insync.replicas=2\n```\n\n*Gotcha: Setting `min.insync.replicas` to the same value as the replication factor means a single broker going down will halt all writes to that topic.*",
+    "difficulty": "medium",
+    "tags": ["durability", "replication"]
+  },
+  {
+    "id": "kafka-006",
+    "question": "Your producer is experiencing high latency, but the data volume is huge. How do you tune the producer for maximum throughput?",
+    "answer": "To maximize throughput, you increase **batching**. By default, `batch.size` is 16KB and `linger.ms` is 0 (send immediately). \n\nYou should increase `linger.ms` (e.g., to `50` or `100`), which forces the producer to wait a few milliseconds to accumulate more messages. Simultaneously, increase `batch.size` (e.g., to `65536` or `131072` bytes). This trades a tiny bit of latency for a massive increase in throughput, reducing the network request count and CPU overhead on the brokers.\n\n```python\nproducer = KafkaProducer(\n    bootstrap_servers='broker:9092',\n    linger_ms=100,\n    batch_size=131072,\n    compression_type='lz4'\n)\n```\n\n*Gotcha: If your message generation rate is very low, setting a high `linger.ms` will artificially inflate latency without any throughput benefit.*",
+    "difficulty": "medium",
+    "tags": ["producer", "performance"]
+  },
+  {
+    "id": "kafka-007",
+    "question": "Explain At-Least-Once vs At-Most-Once processing in Kafka consumers. How do you control this via offsets?",
+    "answer": "It entirely depends on *when* your consumer commits the offset.\n\n**At-Most-Once:** You set `enable.auto.commit = true`. The consumer fetches messages and commits offsets periodically in the background before processing finishes. If the consumer crashes during processing, those messages are lost because Kafka thinks they were successfully processed.\n\n**At-Least-Once (Standard):** You set `enable.auto.commit = false`. You fetch data, process it (e.g., write to a database), and *then* call `consumer.commitSync()`. If the consumer crashes during processing, the offset isn't committed. The restarted consumer will re-read the message, potentially processing it twice. Downstream systems must handle idempotency to prevent duplicate data.\n\n```python\nconsumer = KafkaConsumer('my_topic', enable_auto_commit=False)\nfor msg in consumer:\n    process_to_database(msg.value)\n    consumer.commit() # Commit only after success\n```\n\n*Follow-up they'll probably ask: How do you achieve Exactly-Once processing in a Kafka-to-Database pipeline?*",
+    "difficulty": "medium",
+    "tags": ["consumer", "offsets"]
+  },
+  {
+    "id": "kafka-008",
+    "question": "A producer is sending thousands of messages with the exact same key. What happens to your Kafka partitions, and how do you resolve it?",
+    "answer": "Because Kafka routes messages with the same key to the same partition, this creates a **hot partition**. One broker's CPU, disk IO, and network will max out, while others sit idle. A downstream consumer reading that partition will also become a bottleneck.\n\nTo fix it, you can implement a **custom partitioner** that adds a salt/randomness to the specific hot key, distributing it across partitions. If strict ordering isn't required for that key, you can publish the message with a `null` key so Kafka uses round-robin assignment. If you need both ordering and throughput, you must re-design your partition key (e.g., `user_id + session_id`) to ensure a more uniform distribution.\n\n*Gotcha: Changing the partition key logic downstream requires extremely careful coordination, as historical data for the entity will be in one partition, and new data will be scattered.*",
+    "difficulty": "medium",
+    "tags": ["partitioning", "performance"]
+  },
+  {
+    "id": "kafka-009",
+    "question": "You are integrating Confluent Schema Registry with Avro. What does 'Backward Compatibility' mean, and why is it critical for data pipelines?",
+    "answer": "Backward Compatibility means consumers using the *new* schema can successfully read data written by producers using the *old* schema. \n\nThis is critical because in streaming architectures, you must upgrade consumers before producers. If a producer adds a new field but forgets to provide a default value, the Schema Registry will reject the schema registration if it is configured for backward compatibility. This prevents upstream microservices from injecting unreadable data that would crash downstream Delta Lake ingestion pipelines or PySpark jobs.\n\n```bash\n# Check compatibility level\ncurl -X GET http://schema-registry:8081/config/my_topic-value\n```\n\n*Gotcha: Renaming a field or changing a data type (e.g., int to string) is inherently a breaking change and violates backward compatibility.*",
+    "difficulty": "medium",
+    "tags": ["schema-registry", "avro"]
+  },
+  {
+    "id": "kafka-010",
+    "question": "What is Consumer Lag, and how do you monitor and alert on it in production?",
+    "answer": "Consumer Lag is the mathematical difference between the latest offset written to a partition (Log End Offset) and the latest offset committed by the consumer group. It measures how far behind your processing pipeline is in real-time.\n\nYou monitor it using tools like **Burrow**, Datadog, or Prometheus scraping JMX metrics (`records-lag-max`). \n\nYou should alert on **sustained lag growth** over time (e.g., \"lag is increasing for 15 consecutive minutes\"), rather than absolute static thresholds. Alerting on an absolute spike (e.g., \"lag > 10,000\") causes severe alert fatigue during temporary traffic bursts or expected nightly batch jobs that load bulk data into the topic.\n\n*Follow-up they'll probably ask: What is your immediate incident response play when lag triggers a critical alert?*",
+    "difficulty": "medium",
+    "tags": ["monitoring", "operations"]
+  },
+  {
+    "id": "kafka-011",
+    "question": "How does Kafka handle 'Poison Pill' messages that cause your consumer to crash repeatedly?",
+    "answer": "Kafka doesn't handle them automatically. If your consumer code throws an unhandled exception upon encountering a malformed JSON payload (a poison pill), the consumer crashes, the group rebalances, a new consumer reads the exact same offset, and crashes again—completely blocking the partition.\n\nTo prevent this, you must wrap your deserialization and processing logic in a `try-catch` block. Upon catching a deserialization or validation error, log it, send the raw payload and error trace to a **Dead Letter Queue (DLQ)** topic, and manually acknowledge/commit the offset in the main topic to advance the pointer past the poison pill.\n\n```python\ntry:\n    data = json.loads(msg.value)\nexcept json.JSONDecodeError:\n    dlq_producer.send('dlq_topic', msg.value)\n    consumer.commit() # Move past the bad record\n```\n\n*Gotcha: Do not let your DLQ grow indefinitely. You must have an operational process or secondary pipeline to inspect, fix, and replay DLQ messages.*",
+    "difficulty": "medium",
+    "tags": ["error-handling", "consumers"]
+  },
+  {
+    "id": "kafka-012",
+    "question": "When would a Data Engineer choose AWS Kinesis Data Streams over setting up an Apache Kafka cluster?",
+    "answer": "Kinesis is fully managed, serverless, and charges by shard/hour and payload size. It is vastly simpler to operate than self-managed Kafka (which requires tuning JVMs, OS page caches, and KRaft/ZooKeeper quorums). I'd choose Kinesis for projects with moderate throughput where the team lacks deep distributed systems infrastructure expertise.\n\nHowever, Kafka offers much higher throughput per dollar at high scale, longer retention periods (Kinesis maxes out at 365 days, Kafka is technically infinite), larger message sizes (Kafka easily handles 1MB+, Kinesis max is 1MB), and a richer ecosystem (Kafka Connect, ksqlDB).\n\n*Follow-up they'll probably ask: Have you considered AWS MSK (Managed Streaming for Kafka) as a middle ground?*",
+    "difficulty": "medium",
+    "tags": ["architecture", "aws", "tradeoffs"]
+  },
+  {
+    "id": "kafka-013",
+    "question": "What triggers a Consumer Group Rebalance, and what is the difference between Stop-the-World and Cooperative Rebalancing?",
+    "answer": "A rebalance is triggered when a consumer joins or leaves the group (e.g., crashing or scaling up), or when the topic's partition count increases.\n\nHistorically, Kafka used **Stop-the-World** rebalancing: all consumers dropped their assigned partitions, processing stopped entirely across the cluster, and partitions were reassigned. This caused massive latency spikes.\n\nIn modern Kafka (2.4+), **Cooperative (Incremental) Rebalancing** is the standard. It only revokes partitions that specifically need to be moved to a new consumer, allowing all other consumers to continue processing their assigned partitions without interruption. This drastically reduces pipeline jitter during scaling events.\n\n*Gotcha: Your consumer code must implement `ConsumerRebalanceListener` correctly to commit pending offsets before a partition is revoked, otherwise you risk duplicate processing.*",
+    "difficulty": "medium",
+    "tags": ["consumer-groups", "rebalancing"]
+  },
+  {
+    "id": "kafka-014",
+    "question": "How does Kafka achieve exactly-once semantics (EOS) for data streaming pipelines?",
+    "answer": "EOS in Kafka is achieved by combining **Idempotent Producers** with the **Transactional API**.\n\nAn idempotent producer (`enable.idempotence=true`) attaches a producer ID and sequence number to messages, allowing the broker to deduplicate network retries seamlessly.\n\nThe Transactional API allows a producer to write to multiple partitions atomically. In a consume-process-produce loop (like Kafka Streams or Spark Structured Streaming), the consumer offsets and the downstream output records are committed within the exact same Kafka transaction. If the processing application crashes, the transaction aborts, guaranteeing neither downstream duplicates nor data loss.\n\n```python\nproducer = KafkaProducer(transactional_id='etl_tx_1', enable_idempotence=True)\nproducer.init_transactions()\nproducer.begin_transaction()\n# ... send records and send offsets to transaction ...\nproducer.commit_transaction()\n```\n\n*Gotcha: EOS only guarantees exactly-once processing for pipelines where both the source and sink are Kafka. Writing to external databases requires different transactional strategies (like Two-Phase Commit or idempotent database upserts).*",
+    "difficulty": "medium",
+    "tags": ["exactly-once", "transactions"]
+  },
+  {
+    "id": "kafka-015",
+    "question": "Explain the difference between `session.timeout.ms` and `max.poll.interval.ms` in a consumer. How do you tune them?",
+    "answer": "`session.timeout.ms` governs the background heartbeat thread. If the broker doesn't receive a heartbeat within this time (e.g., network partition or hardware failure), it removes the consumer from the group. Keep this relatively low (e.g., 10-30s) to detect hard failures quickly.\n\n`max.poll.interval.ms` governs the main processing thread. If your consumer takes too long to process a fetched batch and fails to call `poll()` again before this interval expires, the consumer is considered dead (a livelock), triggering a rebalance. For slow, CPU-intensive processing or heavy API calls, you must increase `max.poll.interval.ms` (e.g., to 5 minutes) and potentially reduce `max.poll.records` to ensure `poll()` is called frequently.\n\n*Follow-up they'll probably ask: What happens if you just set both to 10 minutes to avoid rebalances?*",
+    "difficulty": "medium",
+    "tags": ["consumers", "tuning"]
+  },
+  {
+    "id": "kafka-016",
+    "question": "What are the specific architectural tricks Kafka uses to achieve sub-millisecond latency and massive disk throughput?",
+    "answer": "Kafka avoids standard JVM overhead and relies heavily on the **OS Page Cache**. Instead of maintaining a large JVM heap for messages (which causes massive Garbage Collection pauses), data is kept in RAM by the operating system.\n\nIt uses an **append-only sequential log**, which maximizes mechanical HDD and SSD write speeds by avoiding random disk seeks. \n\nCrucially, it uses **Zero-Copy** (the `sendfile` system call in Linux) to transfer data directly from the disk page cache to the network socket buffer, bypassing user-space entirely. Finally, it heavily utilizes message batching and end-to-end compression (e.g., Snappy, LZ4) to saturate network bandwidth.\n\n*Gotcha: Because Kafka relies on the OS page cache, you should never deploy Kafka brokers on machines with highly restricted RAM, even if your JVM heap is configured small.*",
+    "difficulty": "medium",
+    "tags": ["performance", "internals"]
+  },
+  {
+    "id": "kafka-017",
+    "question": "A partition leader crashes, and a replica takes over. How does Kafka ensure consumers don't read uncommitted data, preventing inconsistencies?",
+    "answer": "Kafka uses a mechanism called the **High Watermark**. The High Watermark is the highest offset that has been successfully replicated to all followers currently in the In-Sync Replicas (ISR) list.\n\nConsumers are only allowed to read messages up to the High Watermark. Even if a producer has written a message to the leader (and received an ack if `acks=1`), if the leader crashes before replicating it to the ISR, the new elected leader won't have that message. Because the consumers were restricted by the High Watermark, they never saw the lost message. This prevents a scenario where a consumer processes a message that vanishes after a leader election.\n\n*Gotcha: This is why `acks=1` can cause data loss for the producer, but preserves strict consistency for the consumer.*",
+    "difficulty": "hard",
+    "tags": ["internals", "replication"]
+  },
+  {
+    "id": "kafka-018",
+    "question": "Your PySpark Structured Streaming job reading from Kafka is suddenly failing with `OffsetOutOfRangeException`. Why did this happen, and how do you fix it?",
+    "answer": "This happens when Spark's checkpoint directory contains a starting offset pointer that no longer exists in Kafka. This typically occurs if the streaming pipeline was paused or crashed for longer than Kafka's topic `retention.ms` (e.g., 7 days), causing Kafka to delete the old underlying segment files.\n\nTo recover gracefully, you must acknowledge that the old data is permanently gone. You configure the option `failOnDataLoss=false` in the Spark `readStream`. Setting it to false forces Spark to suppress the exception, skip the missing offsets, and start reading from the earliest available offset currently in the Kafka broker.\n\n```python\ndf = spark.readStream \\\n  .format(\"kafka\") \\\n  .option(\"kafka.bootstrap.servers\", \"broker:9092\") \\\n  .option(\"subscribe\", \"events\") \\\n  .option(\"failOnDataLoss\", \"false\") \\\n  .load()\n```\n\n*Follow-up they'll probably ask: If you delete the Spark checkpoint directory entirely, what happens when you restart the job?*",
+    "difficulty": "hard",
+    "tags": ["spark", "debugging"]
+  },
+  {
+    "id": "kafka-019",
+    "question": "You are migrating a critical, high-volume Kafka cluster from on-prem to AWS MSK with zero downtime. How do you handle data replication and consumer offset migration?",
+    "answer": "We would use **MirrorMaker 2 (MM2)** based on Kafka Connect. MM2 runs in the AWS VPC and replicates topics, consumer groups, and ACLs from the on-prem cluster to MSK asynchronously. \n\nCrucially, MM2 translates consumer offsets. Because the physical offset numbers differ between clusters (due to how segments roll over), MM2 maintains an internal mapping topic (`__consumer_offsets` translation). \n\nTo cut over with zero downtime: we set up upstream producers to dual-write (or cut them over instantly to MSK), wait for MM2 to drain the on-prem lag, and then gracefully shut down consumers. We update the consumers to point to MSK and restart. The consumers use the MM2 translated offsets via the `RemoteClusterUtils` API to resume exactly where they left off without duplicate processing.\n\n*Gotcha: MM2 offset translation is not perfect for active consumers. You must stop the consumer group entirely on the source cluster for a few seconds to let the final offsets sync before starting on the destination cluster.*",
+    "difficulty": "hard",
+    "tags": ["migration", "architecture"]
+  },
+  {
+    "id": "kafka-020",
+    "question": "We have a strict event ordering requirement for a specific `user_id`, but volume requires 100 partitions for parallelism. If a user makes 10 rapid transactions, how do you guarantee they are processed in exact order?",
+    "answer": "To guarantee global order per user across a heavily partitioned topic, the producer must use the `user_id` as the **message key**, ensuring all events for that user hash to the exact same partition. \n\nHowever, this isn't enough. On the producer side, you must set `max.in.flight.requests.per.connection=1` (or `<=5` combined with `enable.idempotence=true`) to prevent out-of-order retries if a network blip occurs during the 10 rapid transactions.\n\nOn the consumer side, a single partition is consumed by only one thread. If you try to multi-thread the processing of a single partition internally to gain more speed, you will instantly break the ordering. You must process sequentially per partition, relying entirely on the 100 partitions across your multiple consumer instances to achieve the overall system throughput.\n\n*Follow-up they'll probably ask: What happens to ordering if you dynamically add 10 more partitions to the topic while the system is running live?*",
+    "difficulty": "hard",
+    "tags": ["design", "ordering"]
+  }
+]
