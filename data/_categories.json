@@ -1,0 +1,4 @@
+[
+  { "id": "spark", "name": "Apache Spark", "icon": "⚡" },
+  { "id": "behavioral", "name": "Behavioral", "icon": "💬" }
+]
