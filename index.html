@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interview Prep</title>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+  <style>
+    /* ── Reset & tokens ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg-subtle: #f9f9f9;
+      --bg-hover: #f3f3f3;
+      --border: #e5e5e5;
+      --text: #111111;
+      --text-muted: #666666;
+      --text-faint: #999999;
+      --accent: #0066ff;
+      --accent-bg: #e8f0ff;
+      --easy: #16a34a;
+      --easy-bg: #dcfce7;
+      --medium: #d97706;
+      --medium-bg: #fef3c7;
+      --hard: #dc2626;
+      --hard-bg: #fee2e2;
+      --sidebar-w: 260px;
+      --radius: 6px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    }
+
+    [data-theme="dark"] {
+      --bg: #111111;
+      --bg-subtle: #1a1a1a;
+      --bg-hover: #222222;
+      --border: #2a2a2a;
+      --text: #eeeeee;
+      --text-muted: #888888;
+      --text-faint: #555555;
+      --accent: #4d9eff;
+      --accent-bg: #0d2040;
+      --easy: #4ade80;
+      --easy-bg: #052e16;
+      --medium: #fbbf24;
+      --medium-bg: #1c1100;
+      --hard: #f87171;
+      --hard-bg: #1f0a0a;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font);
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.5;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────── */
+    #app { display: flex; height: 100vh; overflow: hidden; }
+
+    #sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      background: var(--bg-subtle);
+      overflow: hidden;
+    }
+
+    #main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 40px;
+    }
+
+    /* ── Sidebar internals ──────────────────────────────────────── */
+    #sidebar-header {
+      padding: 16px 14px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #sidebar-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 10px;
+    }
+
+    #btn-practice {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #btn-practice:hover { opacity: 0.88; }
+
+    #search-wrap {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #search {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+    #search:focus { border-color: var(--accent); }
+    #search::placeholder { color: var(--text-faint); }
+
+    #cat-list { flex: 1; overflow-y: auto; padding: 6px 0; }
+
+    .cat-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      border-radius: 0;
+      transition: background 0.1s;
+      border-left: 2px solid transparent;
+    }
+    .cat-item:hover { background: var(--bg-hover); }
+    .cat-item.active {
+      background: var(--accent-bg);
+      border-left-color: var(--accent);
+    }
+
+    .cat-icon { font-size: 15px; flex-shrink: 0; }
+    .cat-info { flex: 1; min-width: 0; }
+    .cat-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cat-progress { font-size: 11px; color: var(--text-faint); }
+
+    #sidebar-footer {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    #btn-theme {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+    }
+    #btn-theme:hover { background: var(--bg-hover); }
+
+    /* ── Hamburger ──────────────────────────────────────────────── */
+    #hamburger {
+      display: none;
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 100;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 9px;
+      font-size: 16px;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    #sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 50;
+    }
+
+    /* ── Welcome view ────────────────────────────────────────────── */
+    #view-welcome {}
+
+    .welcome-heading {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .welcome-sub {
+      color: var(--text-muted);
+      margin-bottom: 28px;
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      flex: 1;
+      min-width: 120px;
+    }
+    .stat-value { font-size: 28px; font-weight: 600; }
+    .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 12px;
+    }
+
+    .progress-cards { display: flex; flex-direction: column; gap: 10px; }
+
+    .progress-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+    .progress-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .progress-card-name { font-weight: 500; }
+    .progress-card-count { font-size: 12px; color: var(--text-muted); }
+    .progress-bar-bg { height: 4px; background: var(--border); border-radius: 2px; }
+    .progress-bar-fill { height: 4px; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
+
+    /* ── Category view ───────────────────────────────────────────── */
+    .cat-view-header { margin-bottom: 20px; }
+    .cat-view-title { font-size: 20px; font-weight: 600; }
+    .cat-view-meta { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+
+    .question-list { display: flex; flex-direction: column; gap: 1px; }
+
+    .q-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      background: var(--bg);
+      margin-bottom: 6px;
+      transition: background 0.1s;
+    }
+    .q-row:hover { background: var(--bg-hover); }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.unseen { background: var(--border); border: 1px solid var(--text-faint); }
+    .status-dot.shaky { background: var(--medium); }
+    .status-dot.mastered { background: var(--easy); }
+
+    .diff-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 99px;
+      flex-shrink: 0;
+      letter-spacing: 0.02em;
+    }
+    .diff-badge.easy { color: var(--easy); background: var(--easy-bg); }
+    .diff-badge.medium { color: var(--medium); background: var(--medium-bg); }
+    .diff-badge.hard { color: var(--hard); background: var(--hard-bg); }
+
+    .q-row-body { flex: 1; min-width: 0; }
+    .q-text { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .q-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
+
+    .tag-pill {
+      font-size: 10px;
+      padding: 1px 7px;
+      border-radius: 99px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    /* ── Question detail view ────────────────────────────────────── */
+    .detail-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      margin-bottom: 20px;
+      padding: 4px 0;
+    }
+    .detail-back:hover { color: var(--text); }
+
+    .detail-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+
+    .detail-question {
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.4;
+      margin-bottom: 20px;
+    }
+
+    #btn-show-answer {
+      padding: 9px 18px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text);
+    }
+    #btn-show-answer:hover { background: var(--bg-hover); }
+
+    #answer-section { margin-top: 24px; }
+
+    .answer-divider {
+      height: 1px;
+      background: var(--border);
+      margin-bottom: 20px;
+    }
+
+    .answer-body {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+
+    /* markdown rendering */
+    .answer-body h1, .answer-body h2, .answer-body h3 {
+      margin: 18px 0 8px;
+      font-weight: 600;
+    }
+    .answer-body h1 { font-size: 17px; }
+    .answer-body h2 { font-size: 15px; }
+    .answer-body h3 { font-size: 14px; }
+    .answer-body p { margin-bottom: 12px; }
+    .answer-body ul, .answer-body ol { padding-left: 20px; margin-bottom: 12px; }
+    .answer-body li { margin-bottom: 4px; }
+    .answer-body strong { font-weight: 600; }
+    .answer-body code {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+    .answer-body pre {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      overflow-x: auto;
+      margin-bottom: 14px;
+    }
+    .answer-body pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .rate-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+
+    .rate-btn {
+      padding: 9px 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 0.1s;
+    }
+    .rate-btn:hover { background: var(--bg-hover); }
+    .rate-btn.shaky { border-color: var(--medium); color: var(--medium); }
+    .rate-btn.shaky:hover { background: var(--medium-bg); }
+    .rate-btn.gotit { border-color: var(--accent); color: var(--accent); }
+    .rate-btn.gotit:hover { background: var(--accent-bg); }
+    .rate-btn.mastered { border-color: var(--easy); color: var(--easy); }
+    .rate-btn.mastered:hover { background: var(--easy-bg); }
+
+    /* ── Practice mode ───────────────────────────────────────────── */
+    .practice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+    .practice-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    #btn-exit-practice {
+      font-size: 12px;
+      color: var(--text-muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    #btn-exit-practice:hover { background: var(--bg-hover); }
+
+    .practice-done {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .practice-done-emoji { font-size: 40px; margin-bottom: 12px; }
+    .practice-done h2 { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+
+    #btn-next-question {
+      margin-top: 24px;
+      padding: 9px 18px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    #btn-next-question:hover { opacity: 0.88; }
+
+    /* ── Search results ──────────────────────────────────────────── */
+    .search-group-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin: 18px 0 8px;
+    }
+    .search-group-label:first-child { margin-top: 0; }
+
+    .search-empty {
+      color: var(--text-muted);
+      font-size: 13px;
+      padding: 20px 0;
+    }
+
+    /* ── Utility ─────────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+
+    /* ── Mobile ──────────────────────────────────────────────────── */
+    @media (max-width: 680px) {
+      #hamburger { display: block; }
+
+      #sidebar {
+        position: fixed;
+        left: -var(--sidebar-w);
+        top: 0;
+        bottom: 0;
+        z-index: 60;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+        width: var(--sidebar-w);
+      }
+      #sidebar.open { transform: translateX(0); }
+      #sidebar-overlay.open { display: block; }
+
+      #main { padding: 20px 18px; padding-top: 52px; }
+
+      .rate-buttons { gap: 8px; }
+      .rate-btn { flex: 1; text-align: center; padding: 9px 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<button id="hamburger" aria-label="Toggle sidebar">☰</button>
+<div id="sidebar-overlay"></div>
+
+<div id="app">
+  <nav id="sidebar">
+    <div id="sidebar-header">
+      <div id="sidebar-title">Interview Prep</div>
+      <button id="btn-practice">⚡ Practice random</button>
+    </div>
+    <div id="search-wrap">
+      <input id="search" type="search" placeholder="Search questions…" autocomplete="off" />
+    </div>
+    <div id="cat-list"><!-- filled by JS --></div>
+    <div id="sidebar-footer">
+      <button id="btn-theme"><!-- filled by JS --></button>
+    </div>
+  </nav>
+
+  <main id="main">
+    <!-- Welcome -->
+    <div id="view-welcome">
+      <div class="welcome-heading">Welcome back 👋</div>
+      <div class="welcome-sub">Pick a category or start a practice session.</div>
+      <div class="stats-row" id="stats-row"><!-- filled --></div>
+      <div class="section-label">Progress by category</div>
+      <div class="progress-cards" id="progress-cards"><!-- filled --></div>
+    </div>
+
+    <!-- Category -->
+    <div id="view-category" class="hidden">
+      <div class="cat-view-header">
+        <div class="cat-view-title" id="cat-title"></div>
+        <div class="cat-view-meta" id="cat-meta"></div>
+      </div>
+      <div class="question-list" id="question-list"><!-- filled --></div>
+    </div>
+
+    <!-- Question detail -->
+    <div id="view-detail" class="hidden">
+      <div class="detail-back" id="btn-back">← Back</div>
+      <div class="detail-meta" id="detail-meta"><!-- filled --></div>
+      <div class="detail-question" id="detail-question"></div>
+      <button id="btn-show-answer">Show answer</button>
+      <div id="answer-section" class="hidden">
+        <div class="answer-divider"></div>
+        <div class="answer-body" id="answer-body"><!-- filled --></div>
+        <div class="rate-buttons">
+          <button class="rate-btn shaky" data-status="shaky">Still shaky</button>
+          <button class="rate-btn gotit" data-status="gotit">Got it</button>
+          <button class="rate-btn mastered" data-status="mastered">Mastered ✓</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Practice -->
+    <div id="view-practice" class="hidden">
+      <div class="practice-header">
+        <span class="practice-label">Practice mode</span>
+        <button id="btn-exit-practice">Exit</button>
+      </div>
+      <div id="practice-body"><!-- filled --></div>
+    </div>
+
+    <!-- Search results -->
+    <div id="view-search" class="hidden">
+      <div class="section-label" style="margin-bottom:14px">Search results</div>
+      <div id="search-results"><!-- filled --></div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── Storage ────────────────────────────────────────────────────────
+const LS_KEY = 'interview_prep';
+
+function loadStore() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
+}
+function saveStore(s) { localStorage.setItem(LS_KEY, JSON.stringify(s)); }
+
+function getProgress() { return loadStore().progress || {}; }
+function setProgress(id, status) {
+  const s = loadStore();
+  if (!s.progress) s.progress = {};
+  s.progress[id] = status;
+  if (!s.lastSeen) s.lastSeen = {};
+  s.lastSeen[id] = Date.now();
+  saveStore(s);
+}
+function getTheme() { return loadStore().theme || null; }
+function saveTheme(t) { const s = loadStore(); s.theme = t; saveStore(s); }
+
+// ── Theme ──────────────────────────────────────────────────────────
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('hljs-light').disabled = (theme === 'dark');
+  document.getElementById('hljs-dark').disabled = (theme !== 'dark');
+  document.getElementById('btn-theme').textContent = theme === 'dark' ? '☀ Light mode' : '☾ Dark mode';
+}
+
+function initTheme() {
+  const saved = getTheme();
+  if (saved) { applyTheme(saved); return; }
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(prefersDark ? 'dark' : 'light');
+}
+
+document.getElementById('btn-theme').addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  saveTheme(next);
+});
+
+// ── Data loading ───────────────────────────────────────────────────
+let categories = [];
+let questions = {}; // { categoryId: [questions] }
+let allQuestions = []; // flat
+
+async function fetchJSON(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(`Failed to load ${path}`);
+  return r.json();
+}
+
+async function loadData() {
+  categories = await fetchJSON('data/_categories.json');
+  await Promise.all(categories.map(async cat => {
+    const qs = await fetchJSON(`data/${cat.id}.json`);
+    questions[cat.id] = qs;
+    allQuestions.push(...qs.map(q => ({ ...q, _catId: cat.id })));
+  }));
+}
+
+// ── State ──────────────────────────────────────────────────────────
+let currentView = 'welcome';
+let currentCatId = null;
+let currentQuestion = null;
+let practiceFromCat = null; // null = all
+
+// ── Views ──────────────────────────────────────────────────────────
+function showView(name) {
+  ['welcome', 'category', 'detail', 'practice', 'search'].forEach(v => {
+    document.getElementById(`view-${v}`).classList.toggle('hidden', v !== name);
+  });
+  currentView = name;
+}
+
+// ── Sidebar category list ──────────────────────────────────────────
+function renderSidebar() {
+  const progress = getProgress();
+  const catList = document.getElementById('cat-list');
+  catList.innerHTML = '';
+  categories.forEach(cat => {
+    const qs = questions[cat.id] || [];
+    const mastered = qs.filter(q => progress[q.id] === 'mastered').length;
+    const el = document.createElement('div');
+    el.className = 'cat-item' + (currentCatId === cat.id ? ' active' : '');
+    el.dataset.catId = cat.id;
+    el.innerHTML = `
+      <span class="cat-icon">${cat.icon}</span>
+      <div class="cat-info">
+        <div class="cat-name">${cat.name}</div>
+        <div class="cat-progress">${mastered} / ${qs.length} mastered</div>
+      </div>`;
+    el.addEventListener('click', () => openCategory(cat.id));
+    catList.appendChild(el);
+  });
+}
+
+// ── Welcome view ───────────────────────────────────────────────────
+function renderWelcome() {
+  const progress = getProgress();
+  const total = allQuestions.length;
+  const mastered = allQuestions.filter(q => progress[q.id] === 'mastered').length;
+  const seen = allQuestions.filter(q => progress[q.id]).length;
+
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Total questions</div></div>
+    <div class="stat-card"><div class="stat-value">${mastered}</div><div class="stat-label">Mastered</div></div>
+    <div class="stat-card"><div class="stat-value">${seen}</div><div class="stat-label">Attempted</div></div>`;
+
+  const cards = document.getElementById('progress-cards');
+  cards.innerHTML = '';
+  categories.forEach(cat => {
+    const qs = questions[cat.id] || [];
+    const m = qs.filter(q => progress[q.id] === 'mastered').length;
+    const pct = qs.length ? Math.round((m / qs.length) * 100) : 0;
+    cards.innerHTML += `
+      <div class="progress-card">
+        <div class="progress-card-header">
+          <span class="progress-card-name">${cat.icon} ${cat.name}</span>
+          <span class="progress-card-count">${m} / ${qs.length}</span>
+        </div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+      </div>`;
+  });
+}
+
+// ── Category view ──────────────────────────────────────────────────
+function openCategory(catId) {
+  currentCatId = catId;
+  document.getElementById('search').value = '';
+  renderSidebar();
+  renderCategoryView(catId);
+  showView('category');
+  closeSidebar();
+}
+
+function renderCategoryView(catId) {
+  const cat = categories.find(c => c.id === catId);
+  const qs = questions[catId] || [];
+  const progress = getProgress();
+
+  document.getElementById('cat-title').textContent = `${cat.icon} ${cat.name}`;
+  const mastered = qs.filter(q => progress[q.id] === 'mastered').length;
+  document.getElementById('cat-meta').textContent = `${qs.length} questions · ${mastered} mastered`;
+
+  const list = document.getElementById('question-list');
+  list.innerHTML = '';
+  qs.forEach(q => {
+    const status = progress[q.id] || 'unseen';
+    const el = document.createElement('div');
+    el.className = 'q-row';
+    el.innerHTML = `
+      <div class="status-dot ${status}"></div>
+      <span class="diff-badge ${q.difficulty}">${q.difficulty}</span>
+      <div class="q-row-body">
+        <div class="q-text">${escHtml(q.question)}</div>
+        <div class="q-tags">${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}</div>
+      </div>`;
+    el.addEventListener('click', () => openQuestion(q, catId, 'category'));
+    list.appendChild(el);
+  });
+}
+
+// ── Question detail view ───────────────────────────────────────────
+function openQuestion(q, catId, backView) {
+  currentQuestion = { q, catId, backView };
+  const progress = getProgress();
+  const status = progress[q.id] || 'unseen';
+  const cat = categories.find(c => c.id === catId);
+
+  document.getElementById('detail-meta').innerHTML = `
+    <span class="diff-badge ${q.difficulty}">${q.difficulty}</span>
+    ${cat ? `<span style="font-size:12px;color:var(--text-muted)">${cat.icon} ${cat.name}</span>` : ''}
+    <span style="font-size:12px;color:var(--text-muted)">·</span>
+    <span style="font-size:12px;color:var(--text-muted)">${statusLabel(status)}</span>
+    ${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}`;
+
+  document.getElementById('detail-question').textContent = q.question;
+  document.getElementById('btn-show-answer').classList.remove('hidden');
+  document.getElementById('answer-section').classList.add('hidden');
+  document.getElementById('answer-body').innerHTML = '';
+
+  document.getElementById('btn-back').onclick = () => {
+    if (backView === 'category') { renderCategoryView(catId); showView('category'); }
+    else if (backView === 'practice') { startPractice(); }
+    else { showView('welcome'); }
+    renderSidebar();
+  };
+
+  showView('detail');
+  closeSidebar();
+}
+
+document.getElementById('btn-show-answer').addEventListener('click', () => {
+  if (!currentQuestion) return;
+  const { q } = currentQuestion;
+  document.getElementById('btn-show-answer').classList.add('hidden');
+  const body = document.getElementById('answer-body');
+  body.innerHTML = marked.parse(q.answer || '');
+  body.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+  document.getElementById('answer-section').classList.remove('hidden');
+});
+
+document.querySelectorAll('.rate-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (!currentQuestion) return;
+    const { q, catId, backView } = currentQuestion;
+    const raw = btn.dataset.status;
+    const status = raw === 'gotit' ? 'shaky' : raw; // "got it" maps to shaky+ progress
+    // Actually: gotit = intermediate, mastered = mastered. Let's store gotit as "gotit" not shaky.
+    setProgress(q.id, raw === 'gotit' ? 'shaky' : raw === 'shaky' ? 'shaky' : 'mastered');
+
+    renderSidebar();
+    if (backView === 'practice') {
+      startPractice();
+    } else if (backView === 'category') {
+      renderCategoryView(catId);
+      showView('category');
+    } else {
+      renderWelcome();
+      showView('welcome');
+    }
+  });
+});
+
+function statusLabel(s) {
+  return { unseen: 'Unseen', shaky: 'Shaky', mastered: 'Mastered' }[s] || s;
+}
+
+// ── Practice mode ──────────────────────────────────────────────────
+function startPractice() {
+  const progress = getProgress();
+  const pool = allQuestions.filter(q => progress[q.id] !== 'mastered');
+
+  showView('practice');
+  closeSidebar();
+
+  const body = document.getElementById('practice-body');
+
+  if (pool.length === 0) {
+    body.innerHTML = `
+      <div class="practice-done">
+        <div class="practice-done-emoji">🎉</div>
+        <h2>Nothing left to practice</h2>
+        <p>You've mastered everything. Reset progress to start over, or add more questions.</p>
+      </div>`;
+    return;
+  }
+
+  const q = pool[Math.floor(Math.random() * pool.length)];
+  const cat = categories.find(c => c.id === q._catId);
+  const status = progress[q.id] || 'unseen';
+
+  body.innerHTML = `
+    <div class="detail-meta" id="practice-meta">
+      <span class="diff-badge ${q.difficulty}">${q.difficulty}</span>
+      ${cat ? `<span style="font-size:12px;color:var(--text-muted)">${cat.icon} ${cat.name}</span>` : ''}
+      <span style="font-size:12px;color:var(--text-muted)">· ${statusLabel(status)}</span>
+      ${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}
+    </div>
+    <div class="detail-question">${escHtml(q.question)}</div>
+    <button id="practice-show-answer" style="padding:9px 18px;background:var(--bg-subtle);border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text)">Show answer</button>
+    <div id="practice-answer-section" class="hidden">
+      <div class="answer-divider" style="height:1px;background:var(--border);margin:20px 0"></div>
+      <div class="answer-body" id="practice-answer-body"></div>
+      <div class="rate-buttons" id="practice-rate-buttons">
+        <button class="rate-btn shaky" data-qid="${q.id}">Still shaky</button>
+        <button class="rate-btn gotit" data-qid="${q.id}">Got it</button>
+        <button class="rate-btn mastered" data-qid="${q.id}">Mastered ✓</button>
+      </div>
+    </div>`;
+
+  document.getElementById('practice-show-answer').addEventListener('click', () => {
+    document.getElementById('practice-show-answer').classList.add('hidden');
+    const ab = document.getElementById('practice-answer-body');
+    ab.innerHTML = marked.parse(q.answer || '');
+    ab.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+    document.getElementById('practice-answer-section').classList.remove('hidden');
+  });
+
+  document.querySelectorAll('#practice-rate-buttons .rate-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const raw = btn.className.includes('shaky') ? 'shaky' : btn.className.includes('gotit') ? 'shaky' : 'mastered';
+      setProgress(q.id, raw);
+      renderSidebar();
+      startPractice();
+    });
+  });
+}
+
+document.getElementById('btn-practice').addEventListener('click', startPractice);
+document.getElementById('btn-exit-practice').addEventListener('click', () => {
+  currentCatId = null;
+  renderSidebar();
+  renderWelcome();
+  showView('welcome');
+});
+
+// ── Search ─────────────────────────────────────────────────────────
+document.getElementById('search').addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  if (!q) {
+    if (currentView === 'search') {
+      currentCatId = null;
+      renderSidebar();
+      renderWelcome();
+      showView('welcome');
+    }
+    return;
+  }
+  renderSearch(q);
+});
+
+function renderSearch(query) {
+  currentCatId = null;
+  renderSidebar();
+  showView('search');
+
+  const matches = allQuestions.filter(q =>
+    q.question.toLowerCase().includes(query) ||
+    (q.answer || '').toLowerCase().includes(query) ||
+    (q.tags || []).some(t => t.toLowerCase().includes(query))
+  );
+
+  const container = document.getElementById('search-results');
+
+  if (matches.length === 0) {
+    container.innerHTML = `<div class="search-empty">No results for "<strong>${escHtml(query)}</strong>"</div>`;
+    return;
+  }
+
+  const byCat = {};
+  matches.forEach(q => {
+    if (!byCat[q._catId]) byCat[q._catId] = [];
+    byCat[q._catId].push(q);
+  });
+
+  container.innerHTML = '';
+  Object.entries(byCat).forEach(([catId, qs]) => {
+    const cat = categories.find(c => c.id === catId);
+    const label = document.createElement('div');
+    label.className = 'search-group-label';
+    label.textContent = `${cat.icon} ${cat.name}`;
+    container.appendChild(label);
+
+    const progress = getProgress();
+    qs.forEach(q => {
+      const status = progress[q.id] || 'unseen';
+      const el = document.createElement('div');
+      el.className = 'q-row';
+      el.innerHTML = `
+        <div class="status-dot ${status}"></div>
+        <span class="diff-badge ${q.difficulty}">${q.difficulty}</span>
+        <div class="q-row-body">
+          <div class="q-text">${escHtml(q.question)}</div>
+          <div class="q-tags">${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}</div>
+        </div>`;
+      el.addEventListener('click', () => {
+        document.getElementById('search').value = '';
+        openQuestion(q, catId, 'welcome');
+      });
+      container.appendChild(el);
+    });
+  });
+}
+
+// ── Mobile sidebar ─────────────────────────────────────────────────
+document.getElementById('hamburger').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('open');
+});
+
+document.getElementById('sidebar-overlay').addEventListener('click', closeSidebar);
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Boot ───────────────────────────────────────────────────────────
+initTheme();
+
+marked.setOptions({ breaks: true });
+
+loadData()
+  .then(() => {
+    renderSidebar();
+    renderWelcome();
+  })
+  .catch(err => {
+    document.getElementById('main').innerHTML = `
+      <div style="padding:40px;color:var(--hard)">
+        <strong>Failed to load data.</strong><br><br>
+        ${err.message}<br><br>
+        Make sure you're serving this over HTTP (not file://) or use a local server:<br>
+        <code style="font-family:monospace">npx serve .</code>
+      </div>`;
+  });
+</script>
+</body>
+</html>
