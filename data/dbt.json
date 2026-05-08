@@ -1,0 +1,142 @@
+[
+  {
+    "id": "dbt-001",
+    "question": "What is dbt and how does it fit into the modern ELT paradigm?",
+    "answer": "dbt (Data Build Tool) represents the **'T'** in ELT (Extract, Load, Transform). Instead of doing heavy transformations in a standalone processing engine before loading (legacy ETL), dbt assumes raw data is already loaded into a modern cloud data warehouse (Databricks, Snowflake, BigQuery).\n\ndbt pushes the compute down into the warehouse. It allows data engineers to write modular `SELECT` statements, abstracts away the boilerplate DDL/DML (like `CREATE TABLE` or `MERGE`), and introduces software engineering best practices to data modeling, such as version control, automated testing, CI/CD, and DRY (Don't Repeat Yourself) architecture via Jinja.\n\n*Follow-up they'll probably ask: Does dbt handle extracting data from an API and loading it into the warehouse? (Answer: No, that's what tools like Fivetran or Airbyte are for).* ",
+    "difficulty": "easy",
+    "tags": ["core-concepts", "elt"]
+  },
+  {
+    "id": "dbt-002",
+    "question": "Explain the difference between `view`, `table`, and `ephemeral` materializations.",
+    "answer": "Materializations define how dbt translates your SQL into database objects.\n\n- **`view`**: Creates a logical view. The SQL executes every time a downstream BI tool queries it. It takes no storage but can be slow for heavy aggregations.\n- **`table`**: Physically materializes the data on disk. Fast for BI tools to query, but takes storage and time to rebuild during a dbt run.\n- **`ephemeral`**: Does not exist in the database at all. dbt interpolates the model's SQL as a Common Table Expression (CTE) directly into downstream models that reference it. This keeps your data warehouse schema clean of intermediate garbage.\n\n```sql\n{{ config(materialized='ephemeral') }}\nselect * from {{ ref('stg_users') }}\n```\n\n*Gotcha: Overusing ephemeral models can cause your final compiled SQL queries to become massive, causing the query planner in Databricks or BigQuery to crash.*",
+    "difficulty": "easy",
+    "tags": ["materializations", "architecture"]
+  },
+  {
+    "id": "dbt-003",
+    "question": "How do you reference another model or source in dbt, and why shouldn't you hardcode table names?",
+    "answer": "You reference other models using the `{{ ref('model_name') }}` function, and raw data using `{{ source('source_name', 'table_name') }}`.\n\nHardcoding table names (e.g., `FROM my_db.prod_schema.fct_sales`) is an anti-pattern for two major reasons:\n1. **DAG Resolution:** The `ref` function allows dbt to infer dependencies and build an internal Directed Acyclic Graph (DAG). This ensures parent tables are always built before child tables.\n2. **Environment Portability:** `ref` dynamically resolves the database and schema based on your active target profile. This allows the exact same code to seamlessly run against a `dev` schema locally and a `prod` schema in CI/CD.\n\n*Follow-up they'll probably ask: How does dbt know where a `source` table lives if it's not a dbt model?*",
+    "difficulty": "easy",
+    "tags": ["refs", "dag"]
+  },
+  {
+    "id": "dbt-004",
+    "question": "What are dbt generic tests, and what are the four built-in tests available out of the box?",
+    "answer": "Generic tests are predefined assertions you define in your `.yml` files to validate data quality. When you run `dbt test`, dbt compiles these into SQL queries that count failing records.\n\nThe four built-in tests are:\n1. **`unique`**: Asserts a column contains no duplicate values.\n2. **`not_null`**: Asserts a column contains no null values.\n3. **`accepted_values`**: Asserts a column only contains values from a specified list.\n4. **`relationships`**: Asserts referential integrity (a foreign key exists in a parent table).\n\n```yaml\nmodels:\n  - name: dim_users\n    columns:\n      - name: user_id\n        tests:\n          - unique\n          - not_null\n```\n\n*Gotcha: Tests run as SQL queries. If you run `unique` on a 10-billion-row table every hour, it will incur massive compute costs.*",
+    "difficulty": "easy",
+    "tags": ["testing", "data-quality"]
+  },
+  {
+    "id": "dbt-005",
+    "question": "How does an `incremental` materialization work? When would you choose an `append` vs `merge` strategy?",
+    "answer": "Incremental models drastically speed up build times by only processing new or updated records, rather than dropping and rebuilding the entire table.\n\n- **`append` strategy**: Simply inserts new records. You use this for immutable event streams (like clickstream data or logs) where historical data is never modified. It's fast and computationally cheap.\n- **`merge` strategy**: Updates existing records and inserts new ones. It requires a `unique_key`. You use this when source records can mutate (e.g., an order status changing from 'pending' to 'shipped'). It is computationally heavier but guarantees no duplicates.\n\n```sql\n{{ config(\n    materialized='incremental',\n    unique_key='order_id',\n    incremental_strategy='merge'\n) }}\n```\n\n*Follow-up they'll probably ask: What happens if you add a new column to a model that is materialized incrementally?*",
+    "difficulty": "medium",
+    "tags": ["incremental", "materializations"]
+  },
+  {
+    "id": "dbt-006",
+    "question": "You have a massive fact table. Data can arrive up to 3 days late. How do you structure your incremental model to capture this late-arriving data without full refreshes?",
+    "answer": "If data arrives 3 days late, a naive approach like `WHERE updated_at > (select max(updated_at) from {{ this }})` will fail. The `max` timestamp might be today, so yesterday's late-arriving record will be ignored forever.\n\nTo handle this gracefully, you introduce a **lookback window** inside your `is_incremental()` macro block. \n\n```sql\n{% if is_incremental() %}\n  -- Look back 3 days from the current max timestamp to catch late arrivals\n  where updated_at >= (select date_add(max(updated_at), -3) from {{ this }})\n{% endif %}\n```\nWhen combined with a `merge` strategy and a `unique_key`, dbt will re-process the last 3 days of data, inserting the late arrivals and harmlessly updating existing rows in place without creating duplicates.\n\n*Gotcha: The wider your lookback window, the more data gets scanned during the merge, increasing your Databricks/BigQuery compute costs.*",
+    "difficulty": "medium",
+    "tags": ["incremental", "late-data"]
+  },
+  {
+    "id": "dbt-007",
+    "question": "Explain how dbt Snapshots implement Slowly Changing Dimensions (SCD Type 2). What is the difference between `timestamp` and `check` strategies?",
+    "answer": "dbt Snapshots track how a mutable row changes over time by appending `dbt_valid_from` and `dbt_valid_to` columns, turning a mutable table into an immutable SCD Type 2 log.\n\n- **`timestamp` strategy**: Uses an `updated_at` column provided by the source system. If the `updated_at` is newer than the snapshot's timestamp, dbt creates a new record.\n- **`check` strategy**: Used when the source system lacks reliable mutation timestamps. You provide a list of columns (e.g., `check_cols=['status', 'address']`). dbt hashes these columns; if the hash changes between the source and the snapshot table, it closes the old record and inserts the new one.\n\n```sql\n{% snapshot my_snapshot %}\n{{ config(\n    target_schema='snapshots',\n    unique_key='user_id',\n    strategy='check',\n    check_cols=['address', 'email']\n) }}\nselect * from {{ source('raw', 'users') }}\n{% endsnapshot %}\n```\n\n*Gotcha: Never use a `ref` inside a snapshot. Snapshots should only query raw `source` data. If the model feeding a snapshot is rebuilt, it destroys the historical state the snapshot relies on.*",
+    "difficulty": "medium",
+    "tags": ["snapshots", "scd2"]
+  },
+  {
+    "id": "dbt-008",
+    "question": "How do you implement a DRY architecture using Jinja macros in dbt? Give an example.",
+    "answer": "Macros are functions written in Jinja that return SQL text. They keep your codebase DRY (Don't Repeat Yourself) by abstracting complex or repetitive SQL logic into a single central definition.\n\nFor example, if you need to convert cents to dollars across 50 different sales models, you create a macro in the `macros/` folder:\n\n```sql\n-- macros/cents_to_dollars.sql\n{% macro cents_to_dollars(column_name, decimal_places=2) %}\n    round( cast({{ column_name }} as numeric) / 100.0, {{ decimal_places }} )\n{% endmacro %}\n```\n\nYou then call it inside your models:\n```sql\nselect\n  order_id,\n  {{ cents_to_dollars('revenue_cents') }} as revenue_usd\nfrom {{ ref('stg_orders') }}\n```\nIf the finance team decides to round to 4 decimal places instead, you update one macro file, and it dynamically propagates to all 50 models.\n\n*Follow-up they'll probably ask: Can macros execute actual SQL against the database, or just generate text?*",
+    "difficulty": "medium",
+    "tags": ["macros", "jinja"]
+  },
+  {
+    "id": "dbt-009",
+    "question": "You want to orchestrate dbt runs using Apache Airflow. What are the pros and cons of using the `BashOperator` vs Astronomer's `Cosmos`?",
+    "answer": "Historically, teams used the **`BashOperator`** to execute `dbt run`. \n- *Pros*: Extremely simple to set up.\n- *Cons*: It treats the entire dbt project as a single opaque Airflow task. If model #99 fails, the whole Airflow task fails. Retrying forces you to rerun everything from scratch unless you write complex custom bash logic.\n\n**Astronomer Cosmos** parses the `manifest.json` and dynamically maps every single dbt model to an individual Airflow task node.\n- *Pros*: Granular visibility in the Airflow UI. If a model fails, you can retry just that specific model and its downstream dependents natively via Airflow.\n- *Cons*: Parsing a massive `manifest.json` during Airflow DAG parsing time can overload the Airflow scheduler's CPU. It requires careful optimization (like pre-compiling the manifest in a CI pipeline).\n\n*Gotcha: If you use Cosmos, make sure Airflow and dbt share the exact same Python dependency environment, or use the Cosmos Kubernetes executor.*",
+    "difficulty": "medium",
+    "tags": ["airflow", "orchestration"]
+  },
+  {
+    "id": "dbt-010",
+    "question": "Describe a robust CI/CD pipeline for dbt. How do you implement 'Slim CI' to prevent testing bottlenecks on PRs?",
+    "answer": "A standard CI pipeline runs linting (`sqlfluff`), validates compilation, and runs tests. However, running a full `dbt build` on a 1000-model project for every Pull Request is incredibly slow and expensive.\n\n**Slim CI** solves this by only building models that were modified in the PR, plus their immediate downstream dependents. It relies on the `state:modified` selector.\n\nIn the pipeline:\n1. Download the `manifest.json` from the last successful Production run (the \"state\").\n2. Run the modified models using the `--defer` flag:\n```bash\ndbt build --select state:modified+ --state ./prod-artifacts --defer\n```\n`--defer` is the magic: if `model_B` relies on `model_A`, but `model_A` wasn't modified, dbt won't build `model_A` in your CI schema. Instead, it \"defers\" and queries the production version of `model_A` directly, saving massive amounts of compute.\n\n*Follow-up they'll probably ask: How do you handle testing if a PR deletes a column that a downstream model relies on?*",
+    "difficulty": "medium",
+    "tags": ["ci-cd", "state-modified"]
+  },
+  {
+    "id": "dbt-011",
+    "question": "How do you manage multi-environment deployments (Dev, QA, Prod) in dbt securely?",
+    "answer": "Multi-environment routing is handled natively via the `profiles.yml` file combined with the `--target` CLI flag. \n\nYour `profiles.yml` defines targets containing connection logic. For example, `dev` points to `walid_dev_schema` and `prod` points to `analytics_prod_schema`.\nLocally, engineers default to the `dev` target. In the CI/CD pipeline, the deployment runner passes the `--target prod` flag.\n\nCrucially, you must **never** hardcode passwords or tokens in `profiles.yml`. Secure environments inject secrets dynamically via Jinja environment variables:\n```yaml\noutputs:\n  prod:\n    type: databricks\n    schema: analytics_prod\n    token: \"{{ env_var('DBT_PROD_TOKEN') }}\"\n```\n\n*Gotcha: If you rely on environment variables, you must ensure your local development environment has mock/dev variables loaded, otherwise `dbt compile` will fail instantly.*",
+    "difficulty": "medium",
+    "tags": ["environments", "security"]
+  },
+  {
+    "id": "dbt-012",
+    "question": "What are `pre-hook` and `post-hook` configurations? Give a real-world example of when a data engineer would use them.",
+    "answer": "Hooks are arbitrary SQL statements that dbt executes either immediately before or after a model runs.\n\nA classic Data Engineering use case for a **`post-hook`** is managing row-level security or granting read permissions to a BI tool. Because a `table` materialization drops and recreates the table, it often strips existing database permissions. You use a post-hook to re-apply them seamlessly:\n\n```yaml\nmodels:\n  - name: fct_revenue\n    config:\n      post-hook: \"GRANT SELECT ON {{ this }} TO ROLE tableau_read_only\"\n```\n\nA **`pre-hook`** is often used in platforms like Redshift or Snowflake to create specific User Defined Functions (UDFs) that the model's SQL depends on, or to run `OPTIMIZE` commands on underlying tables prior to joining them.\n\n*Gotcha: Hooks execute within the same transaction as the model (if the database supports it). If your post-hook fails, the entire model build fails and rolls back.*",
+    "difficulty": "medium",
+    "tags": ["hooks", "operations"]
+  },
+  {
+    "id": "dbt-013",
+    "question": "How do you organize a dbt project directory for a Medallion Architecture (Bronze, Silver, Gold)?",
+    "answer": "In a Medallion Architecture, you structure your `models/` directory strictly to enforce data flow:\n\n1. **`staging/` (Bronze to Silver edge)**: 1:1 views of raw source tables. This is where you rename columns, cast data types, and standard nulls. They should only `source()` raw data.\n2. **`intermediate/` (Silver)**: Ephemeral or view models handling complex joins, deduplication, and business logic without exposing the messy middle-steps to BI tools.\n3. **`marts/` (Gold)**: Heavily aggregated, star-schema fact and dimension tables (e.g., `fct_sales`, `dim_users`). Materialized as tables or incrementals for blazing-fast PowerBI consumption.\n\nYou enforce rules via `dbt-project-evaluator`: `marts` can only `ref()` `intermediate` or `marts`, never `staging`. `staging` can never `ref()` another model.\n\n*Follow-up they'll probably ask: Why not just join raw sources directly in the gold `marts` layers to save time?*",
+    "difficulty": "medium",
+    "tags": ["architecture", "medallion"]
+  },
+  {
+    "id": "dbt-014",
+    "question": "Your dbt run is taking 3 hours. How do you optimize execution time using threads and analyzing the DAG?",
+    "answer": "First, ensure you are utilizing parallel processing. By default, dbt uses 1 thread. Update your `profiles.yml` or pass `--threads 8` to allow dbt to execute independent DAG branches simultaneously against the data warehouse.\n\nSecond, analyze materialization bottlenecks. If a massive table is materialized as a `view` but queried by 10 downstream `marts` models, the warehouse is re-computing that heavy view 10 times. Change it to a `table` or `ephemeral`.\n\nThird, for massive fact tables taking too long to rebuild, switch from `table` to `incremental` materialization. Furthermore, ensure you specify clustering/partitioning keys in the model config (e.g., `partition_by` in BigQuery or `cluster_by` in Databricks/Snowflake) to speed up downstream aggregations.\n\n*Gotcha: Setting `--threads 100` won't make it 100x faster if your data warehouse cluster only has the concurrency capacity to process 5 queries at a time; it will just queue them.*",
+    "difficulty": "medium",
+    "tags": ["performance", "execution"]
+  },
+  {
+    "id": "dbt-015",
+    "question": "What are dbt seeds, and in what scenarios should a data engineer strictly avoid using them?",
+    "answer": "Seeds are CSV files stored in the `seeds/` directory of your repo that dbt loads directly into the data warehouse using the `dbt seed` command. \n\nThey are perfect for small, static mapping tables (e.g., mapping ISO country codes to full names, or a hardcoded list of internal IP addresses to exclude from web analytics).\n\nYou should **strictly avoid** seeds for:\n1. **Large datasets**: dbt is not a high-performance data loader. Loading a 100MB CSV via dbt will crash or take hours.\n2. **Frequently changing data**: If the data changes daily, every change requires a Git commit, PR review, and CI/CD deployment. Frequent changes should be handled by an operational database synced via Fivetran or Airbyte.\n3. **Sensitive data**: Committing PII or passwords into a CSV in version control is a massive security violation.\n\n*Follow-up they'll probably ask: How do you reference a seed in your SQL model? (Answer: Exactly like a model, using `{{ ref('seed_name') }}`).*",
+    "difficulty": "medium",
+    "tags": ["seeds", "best-practices"]
+  },
+  {
+    "id": "dbt-016",
+    "question": "How do you handle environment-specific logic in a model? For example, limiting data volume in Dev to speed up local runs.",
+    "answer": "To drastically speed up local development on massive event tables, you can use Jinja `target` variables to dynamically alter the compiled SQL based on the environment running it.\n\nBy checking `target.name` (which maps to the profile target like 'dev' or 'prod'), you can inject `LIMIT` or `WHERE` clauses:\n\n```sql\nselect * from {{ ref('stg_massive_clickstream') }}\n\n{% if target.name == 'dev' %}\n    -- In dev, only process the last 3 days of data\n    where event_date >= current_date - interval 3 days\n{% endif %}\n```\nThis ensures `prod` processes the full multi-year history, while `dev` remains blazing fast and cheap.\n\n*Gotcha: Be incredibly careful using this on models that calculate distinct counts or moving averages, as the dev environment will output logically incorrect results compared to prod.*",
+    "difficulty": "medium",
+    "tags": ["jinja", "environments"]
+  },
+  {
+    "id": "dbt-017",
+    "question": "A model uses an `incremental` materialization with `unique_key`. The data warehouse is Databricks (Delta Lake). Under the hood, what SQL does dbt actually execute, and how can you optimize the Delta merge?",
+    "answer": "When using `incremental` with a `unique_key` on Databricks, dbt doesn't write magical Python. It creates a temporary table/view of your new data, and then executes a standard SQL Delta `MERGE INTO` statement:\n\n```sql\nMERGE INTO prod_schema.fct_sales as DBT_INTERNAL_DEST\nUSING temp_fct_sales_new_data as DBT_INTERNAL_SOURCE\nON DBT_INTERNAL_DEST.order_id = DBT_INTERNAL_SOURCE.order_id\nWHEN MATCHED THEN UPDATE SET ...\nWHEN NOT MATCHED THEN INSERT ...\n```\n\nTo optimize this on massive Delta tables, you MUST prevent the `MERGE` from full-table scanning the destination. You do this by passing `incremental_predicates` in the config block. By passing `[\"DBT_INTERNAL_DEST.event_date >= date_add(current_date(), -7)\"]`, Databricks skips scanning any Parquet files older than 7 days, cutting compute time by 90%.\n\n*Gotcha: If your target table isn't partitioned or Z-Ordered, `incremental_predicates` won't help much because Databricks can't perform partition pruning.*",
+    "difficulty": "hard",
+    "tags": ["internals", "databricks"]
+  },
+  {
+    "id": "dbt-018",
+    "question": "You are building a complex financial model that requires a recursive CTE (e.g., calculating running balances across account hierarchies). How do you cleanly implement this in dbt without creating a monolithic 1000-line SQL file?",
+    "answer": "Recursive CTEs (`WITH RECURSIVE`) can quickly turn a dbt model into unreadable spaghetti. \n\nWhile dbt doesn't natively allow you to split a single `WITH RECURSIVE` statement across multiple physical model files via `ref`, you can cleanly isolate the prep work. \n\nFirst, build the Anchor Member (the starting dataset) and the Recursive Member (the join dataset) as completely separate `ephemeral` models. \n\nThen, in your final materialized model, you combine them:\n```sql\nWITH RECURSIVE hierarchy AS (\n    -- Anchor\n    SELECT * FROM {{ ref('ephemeral_account_anchor') }}\n    UNION ALL\n    -- Recursive step\n    SELECT child.* \n    FROM {{ ref('ephemeral_account_relations') }} child\n    JOIN hierarchy parent ON child.parent_id = parent.id\n)\nSELECT * FROM hierarchy\n```\nThis abstracts 90% of the complex business logic into testable, isolated ephemeral models, leaving the recursive join clean and readable.\n\n*Follow-up they'll probably ask: How do you unit test the anchor member if it's ephemeral and doesn't exist in the database?*",
+    "difficulty": "hard",
+    "tags": ["advanced-sql", "modeling"]
+  },
+  {
+    "id": "dbt-019",
+    "question": "We have a massive monolithic dbt project with 2000 models taking 4 hours to run. We want to split it into multiple smaller projects (Data Mesh). How do you handle cross-project dependencies using dbt Mesh?",
+    "answer": "When a project is too large, you adopt **dbt Mesh**, splitting it by domain (e.g., `marketing_project`, `finance_project`).\n\nTo handle cross-dependencies natively:\n1. The `finance_project` defines its gold models as public APIs by setting `access: public` in its `schema.yml`. It then builds and publishes its state.\n2. The `marketing_project` declares the finance project in its `dependencies.yml`.\n3. Instead of a standard ref, marketing uses a cross-project ref: `{{ ref('finance_project', 'fct_revenue') }}`.\n\ndbt dynamically resolves this metadata via dbt Cloud (or local artifact resolution). It fetches the exact database schema where `finance_project` built `fct_revenue` and interpolates it. This decouples the repositories while maintaining lineage, preventing the marketing team from having to hardcode `prod_finance.fct_revenue`.\n\n*Gotcha: Breaking a monolith into a Mesh introduces organizational complexity; if Finance introduces a breaking schema change to a public model, the Marketing pipeline will fail.*",
+    "difficulty": "hard",
+    "tags": ["architecture", "data-mesh"]
+  },
+  {
+    "id": "dbt-020",
+    "question": "A bad deployment bypassed CI, and a critical incremental model ran, merging garbage data into production for the last 12 hours. Walk me through your incident response and exact recovery steps using dbt commands.",
+    "answer": "If an incremental model merges garbage data, a standard `dbt run` won't fix it, because the `merge` strategy updates rows but doesn't delete historical garbage records that shouldn't exist.\n\n1. **Stop the bleeding:** Pause the Airflow scheduler or dbt Cloud jobs to prevent downstream contamination.\n2. **Revert the code:** Revert the bad PR in Git, merge the fix to `main`, and verify via CI.\n3. **Full Refresh:** You must obliterate the corrupted table and rebuild it from source. You run dbt with the `--full-refresh` flag, which executes a `DROP TABLE` and `CREATE TABLE` instead of a `MERGE`:\n   `dbt run --select fct_corrupted_model --full-refresh --target prod`\n4. **Downstream recovery:** You must repair all downstream models that consumed the garbage data:\n   `dbt run --select fct_corrupted_model+ --target prod`\n5. **Post-mortem:** Analyze why CI testing failed to catch the garbage (e.g., missing `accepted_values` generic tests, or lack of a custom singular test for business logic constraints).\n\n*Gotcha: A `--full-refresh` on a multi-terabyte fact table might take hours or cost thousands of dollars in Databricks/BigQuery compute.*",
+    "difficulty": "hard",
+    "tags": ["operations", "disaster-recovery"]
+  }
+]
