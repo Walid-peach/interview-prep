@@ -1,4 +1,17 @@
 [
-  { "id": "spark", "name": "Apache Spark", "icon": "⚡" },
-  { "id": "behavioral", "name": "Behavioral", "icon": "💬" }
+  {
+    "id": "spark",
+    "name": "Apache Spark",
+    "icon": "⚡"
+  },
+  {
+    "id": "behavioral",
+    "name": "Behavioral",
+    "icon": "💬"
+  },
+  {
+    "id": "airflow",
+    "name": "Apache Airflow",
+    "icon": "🌬️"
+  }
 ]
