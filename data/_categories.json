@@ -28,5 +28,10 @@
     "id": "dbt",
     "name": "dbt",
     "icon": "🏗️"
+  },
+  {
+    "id": "aws",
+    "name": "Amazon Web Services",
+    "icon": "☁️"
   }
 ]
