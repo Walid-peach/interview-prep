@@ -43,5 +43,10 @@
     "id": "spark-stream",
     "name": "Spark Streaming",
     "icon": "🌊"
+  },
+  {
+    "id": "system-design",
+    "name": "System Design",
+    "icon": "🏗️"
   }
 ]
