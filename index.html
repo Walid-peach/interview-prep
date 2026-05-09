@@ -832,6 +832,18 @@ function openQuestion(q, catId, backView, questionList) {
   closeSidebar();
 }
 
+document.getElementById('btn-prev-q').addEventListener('click', () => {
+  if (currentQuestionIndex <= 0) return;
+  const q = currentQuestionList[currentQuestionIndex - 1];
+  openQuestion(q, q._catId, currentQuestion.backView, currentQuestionList);
+});
+
+document.getElementById('btn-next-q').addEventListener('click', () => {
+  if (currentQuestionIndex >= currentQuestionList.length - 1) return;
+  const q = currentQuestionList[currentQuestionIndex + 1];
+  openQuestion(q, q._catId, currentQuestion.backView, currentQuestionList);
+});
+
 document.getElementById('btn-show-answer').addEventListener('click', () => {
   if (!currentQuestion) return;
   const { q } = currentQuestion;
@@ -933,7 +945,7 @@ function renderPracticeList() {
             <div class="q-text">${escHtml(q.question)}</div>
             <div class="q-tags">${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}</div>
           </div>`;
-        el.addEventListener('click', () => openQuestion(q, q._catId, 'practice'));
+        el.addEventListener('click', () => openQuestion(q, q._catId, 'practice', practiceQueue));
         list.appendChild(el);
       });
 
@@ -1010,7 +1022,7 @@ function renderSearch(query) {
         </div>`;
       el.addEventListener('click', () => {
         document.getElementById('search').value = '';
-        openQuestion(q, catId, 'welcome');
+        openQuestion(q, catId, 'welcome', matches);
       });
       container.appendChild(el);
     });
