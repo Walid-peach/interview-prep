@@ -48,5 +48,10 @@
     "id": "system-design",
     "name": "System Design",
     "icon": "🏗️"
+  },
+  {
+    "id": "databricks",
+    "name": "Databricks",
+    "icon": "🧱"
   }
 ]
