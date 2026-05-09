@@ -49,3 +49,5 @@ Edit the relevant file in `data/` and reload the page.
 ## Progress storage
 
 Progress is saved in `localStorage` under the key `interview_prep`. Clear browser storage to reset.
+
+→ [Generate your personal questions](personal-questions.md)
