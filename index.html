@@ -97,8 +97,14 @@
       margin-bottom: 10px;
     }
 
+    #practice-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
     #btn-practice {
-      width: 100%;
+      flex: 1;
       padding: 8px 12px;
       background: var(--accent);
       color: #fff;
@@ -113,6 +119,22 @@
       gap: 6px;
     }
     #btn-practice:hover { opacity: 0.88; }
+
+    #practice-count {
+      width: 48px;
+      padding: 7px 6px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      text-align: center;
+      outline: none;
+      -moz-appearance: textfield;
+    }
+    #practice-count::-webkit-inner-spin-button,
+    #practice-count::-webkit-outer-spin-button { -webkit-appearance: none; }
+    #practice-count:focus { border-color: var(--accent); }
 
     #search-wrap {
       padding: 10px 14px;
@@ -514,7 +536,10 @@
   <nav id="sidebar">
     <div id="sidebar-header">
       <div id="sidebar-title">Interview Prep</div>
-      <button id="btn-practice">⚡ Practice random</button>
+      <div id="practice-row">
+        <button id="btn-practice">⚡ Practice random</button>
+        <input id="practice-count" type="number" min="1" max="999" value="10" title="Number of questions" />
+      </div>
     </div>
     <div id="search-wrap">
       <input id="search" type="search" placeholder="Search questions…" autocomplete="off" />
@@ -564,7 +589,7 @@
     <!-- Practice -->
     <div id="view-practice" class="hidden">
       <div class="practice-header">
-        <span class="practice-label">Practice mode</span>
+        <span class="practice-label">Practice — <span id="practice-progress"></span></span>
         <button id="btn-exit-practice">Exit</button>
       </div>
       <div id="practice-body"><!-- filled --></div>
@@ -810,6 +835,9 @@ function statusLabel(s) {
 }
 
 // ── Practice mode ──────────────────────────────────────────────────
+let practiceQueue = [];
+let practiceQueueIndex = 0;
+
 function startPractice() {
   const progress = getProgress();
   const pool = allQuestions.filter(q => progress[q.id] !== 'mastered');
@@ -820,6 +848,7 @@ function startPractice() {
   const body = document.getElementById('practice-body');
 
   if (pool.length === 0) {
+    document.getElementById('practice-progress').textContent = '';
     body.innerHTML = `
       <div class="practice-done">
         <div class="practice-done-emoji">🎉</div>
@@ -829,7 +858,32 @@ function startPractice() {
     return;
   }
 
-  const q = pool[Math.floor(Math.random() * pool.length)];
+  const n = Math.min(Math.max(parseInt(document.getElementById('practice-count').value, 10) || 10, 1), pool.length);
+  const shuffled = pool.slice().sort(() => Math.random() - 0.5);
+  practiceQueue = shuffled.slice(0, n);
+  practiceQueueIndex = 0;
+
+  showPracticeQuestion();
+}
+
+function showPracticeQuestion() {
+  const body = document.getElementById('practice-body');
+  const progress = getProgress();
+
+  if (practiceQueueIndex >= practiceQueue.length) {
+    document.getElementById('practice-progress').textContent = `${practiceQueue.length} / ${practiceQueue.length}`;
+    body.innerHTML = `
+      <div class="practice-done">
+        <div class="practice-done-emoji">🎉</div>
+        <h2>Session complete!</h2>
+        <p>You went through ${practiceQueue.length} question${practiceQueue.length !== 1 ? 's' : ''}.</p>
+      </div>`;
+    return;
+  }
+
+  document.getElementById('practice-progress').textContent = `${practiceQueueIndex + 1} / ${practiceQueue.length}`;
+
+  const q = practiceQueue[practiceQueueIndex];
   const cat = categories.find(c => c.id === q._catId);
   const status = progress[q.id] || 'unseen';
 
@@ -846,9 +900,9 @@ function startPractice() {
       <div class="answer-divider" style="height:1px;background:var(--border);margin:20px 0"></div>
       <div class="answer-body" id="practice-answer-body"></div>
       <div class="rate-buttons" id="practice-rate-buttons">
-        <button class="rate-btn shaky" data-qid="${q.id}">Still shaky</button>
-        <button class="rate-btn gotit" data-qid="${q.id}">Got it</button>
-        <button class="rate-btn mastered" data-qid="${q.id}">Mastered ✓</button>
+        <button class="rate-btn shaky">Still shaky</button>
+        <button class="rate-btn gotit">Got it</button>
+        <button class="rate-btn mastered">Mastered ✓</button>
       </div>
     </div>`;
 
@@ -862,10 +916,11 @@ function startPractice() {
 
   document.querySelectorAll('#practice-rate-buttons .rate-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const raw = btn.className.includes('shaky') ? 'shaky' : btn.className.includes('gotit') ? 'shaky' : 'mastered';
+      const raw = btn.className.includes('mastered') ? 'mastered' : 'shaky';
       setProgress(q.id, raw);
       renderSidebar();
-      startPractice();
+      practiceQueueIndex++;
+      showPracticeQuestion();
     });
   });
 }
