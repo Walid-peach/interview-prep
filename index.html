@@ -328,6 +328,13 @@
     }
 
     /* ── Question detail view ────────────────────────────────────── */
+    .detail-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
     .detail-back {
       display: inline-flex;
       align-items: center;
@@ -335,10 +342,23 @@
       font-size: 13px;
       color: var(--text-muted);
       cursor: pointer;
-      margin-bottom: 20px;
       padding: 4px 0;
     }
     .detail-back:hover { color: var(--text); }
+
+    .detail-nav-arrows { display: flex; gap: 6px; }
+
+    .btn-nav-q {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    .btn-nav-q:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+    .btn-nav-q:disabled { opacity: 0.3; cursor: default; }
 
     .detail-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 
@@ -571,7 +591,13 @@
 
     <!-- Question detail -->
     <div id="view-detail" class="hidden">
-      <div class="detail-back" id="btn-back">← Back</div>
+      <div class="detail-nav">
+        <div class="detail-back" id="btn-back">← Back</div>
+        <div class="detail-nav-arrows">
+          <button class="btn-nav-q" id="btn-prev-q">← Prev</button>
+          <button class="btn-nav-q" id="btn-next-q">Next →</button>
+        </div>
+      </div>
       <div class="detail-meta" id="detail-meta"><!-- filled --></div>
       <div class="detail-question" id="detail-question"></div>
       <button id="btn-show-answer">Show answer</button>
@@ -670,7 +696,8 @@ async function loadData() {
 let currentView = 'welcome';
 let currentCatId = null;
 let currentQuestion = null;
-let practiceFromCat = null; // null = all
+let currentQuestionList = [];
+let currentQuestionIndex = -1;
 
 // ── Views ──────────────────────────────────────────────────────────
 function showView(name) {
@@ -763,14 +790,21 @@ function renderCategoryView(catId) {
         <div class="q-text">${escHtml(q.question)}</div>
         <div class="q-tags">${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}</div>
       </div>`;
-    el.addEventListener('click', () => openQuestion(q, catId, 'category'));
+    el.addEventListener('click', () => openQuestion(q, catId, 'category', qs));
     list.appendChild(el);
   });
 }
 
 // ── Question detail view ───────────────────────────────────────────
-function openQuestion(q, catId, backView) {
+function openQuestion(q, catId, backView, questionList) {
   currentQuestion = { q, catId, backView };
+  currentQuestionList = questionList || [];
+  currentQuestionIndex = currentQuestionList.findIndex(x => x.id === q.id);
+
+  const prevBtn = document.getElementById('btn-prev-q');
+  const nextBtn = document.getElementById('btn-next-q');
+  prevBtn.disabled = currentQuestionIndex <= 0;
+  nextBtn.disabled = currentQuestionIndex < 0 || currentQuestionIndex >= currentQuestionList.length - 1;
   const progress = getProgress();
   const status = progress[q.id] || 'unseen';
   const cat = categories.find(c => c.id === catId);
@@ -789,7 +823,7 @@ function openQuestion(q, catId, backView) {
 
   document.getElementById('btn-back').onclick = () => {
     if (backView === 'category') { renderCategoryView(catId); showView('category'); }
-    else if (backView === 'practice') { startPractice(); }
+    else if (backView === 'practice') { renderPracticeList(); showView('practice'); }
     else { showView('welcome'); }
     renderSidebar();
   };
@@ -797,6 +831,18 @@ function openQuestion(q, catId, backView) {
   showView('detail');
   closeSidebar();
 }
+
+document.getElementById('btn-prev-q').addEventListener('click', () => {
+  if (currentQuestionIndex <= 0) return;
+  const q = currentQuestionList[currentQuestionIndex - 1];
+  openQuestion(q, q._catId, currentQuestion.backView, currentQuestionList);
+});
+
+document.getElementById('btn-next-q').addEventListener('click', () => {
+  if (currentQuestionIndex >= currentQuestionList.length - 1) return;
+  const q = currentQuestionList[currentQuestionIndex + 1];
+  openQuestion(q, q._catId, currentQuestion.backView, currentQuestionList);
+});
 
 document.getElementById('btn-show-answer').addEventListener('click', () => {
   if (!currentQuestion) return;
@@ -819,7 +865,7 @@ document.querySelectorAll('.rate-btn').forEach(btn => {
 
     renderSidebar();
     if (backView === 'practice') {
-      startPractice();
+      renderPracticeList(); showView('practice');
     } else if (backView === 'category') {
       renderCategoryView(catId);
       showView('category');
@@ -836,20 +882,16 @@ function statusLabel(s) {
 
 // ── Practice mode ──────────────────────────────────────────────────
 let practiceQueue = [];
-let practiceQueueIndex = 0;
 
 function startPractice() {
   const progress = getProgress();
   const pool = allQuestions.filter(q => progress[q.id] !== 'mastered');
 
-  showView('practice');
-  closeSidebar();
-
-  const body = document.getElementById('practice-body');
-
   if (pool.length === 0) {
+    showView('practice');
+    closeSidebar();
     document.getElementById('practice-progress').textContent = '';
-    body.innerHTML = `
+    document.getElementById('practice-body').innerHTML = `
       <div class="practice-done">
         <div class="practice-done-emoji">🎉</div>
         <h2>Nothing left to practice</h2>
@@ -861,68 +903,54 @@ function startPractice() {
   const n = Math.min(Math.max(parseInt(document.getElementById('practice-count').value, 10) || 10, 1), pool.length);
   const shuffled = pool.slice().sort(() => Math.random() - 0.5);
   practiceQueue = shuffled.slice(0, n);
-  practiceQueueIndex = 0;
 
-  showPracticeQuestion();
+  renderPracticeList();
+  showView('practice');
+  closeSidebar();
 }
 
-function showPracticeQuestion() {
-  const body = document.getElementById('practice-body');
+function renderPracticeList() {
   const progress = getProgress();
+  const answered = practiceQueue.filter(q => progress[q.id]).length;
+  document.getElementById('practice-progress').textContent = `${answered} / ${practiceQueue.length} answered`;
 
-  if (practiceQueueIndex >= practiceQueue.length) {
-    document.getElementById('practice-progress').textContent = `${practiceQueue.length} / ${practiceQueue.length}`;
-    body.innerHTML = `
-      <div class="practice-done">
-        <div class="practice-done-emoji">🎉</div>
-        <h2>Session complete!</h2>
-        <p>You went through ${practiceQueue.length} question${practiceQueue.length !== 1 ? 's' : ''}.</p>
-      </div>`;
-    return;
-  }
+  const body = document.getElementById('practice-body');
+  body.innerHTML = '';
 
-  document.getElementById('practice-progress').textContent = `${practiceQueueIndex + 1} / ${practiceQueue.length}`;
-
-  const q = practiceQueue[practiceQueueIndex];
-  const cat = categories.find(c => c.id === q._catId);
-  const status = progress[q.id] || 'unseen';
-
-  body.innerHTML = `
-    <div class="detail-meta" id="practice-meta">
-      <span class="diff-badge ${q.difficulty}">${q.difficulty}</span>
-      ${cat ? `<span style="font-size:12px;color:var(--text-muted)">${cat.icon} ${cat.name}</span>` : ''}
-      <span style="font-size:12px;color:var(--text-muted)">· ${statusLabel(status)}</span>
-      ${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}
-    </div>
-    <div class="detail-question">${escHtml(q.question)}</div>
-    <button id="practice-show-answer" style="padding:9px 18px;background:var(--bg-subtle);border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text)">Show answer</button>
-    <div id="practice-answer-section" class="hidden">
-      <div class="answer-divider" style="height:1px;background:var(--border);margin:20px 0"></div>
-      <div class="answer-body" id="practice-answer-body"></div>
-      <div class="rate-buttons" id="practice-rate-buttons">
-        <button class="rate-btn shaky">Still shaky</button>
-        <button class="rate-btn gotit">Got it</button>
-        <button class="rate-btn mastered">Mastered ✓</button>
-      </div>
-    </div>`;
-
-  document.getElementById('practice-show-answer').addEventListener('click', () => {
-    document.getElementById('practice-show-answer').classList.add('hidden');
-    const ab = document.getElementById('practice-answer-body');
-    ab.innerHTML = marked.parse(q.answer || '');
-    ab.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
-    document.getElementById('practice-answer-section').classList.remove('hidden');
+  const byCat = {};
+  practiceQueue.forEach(q => {
+    if (!byCat[q._catId]) byCat[q._catId] = [];
+    byCat[q._catId].push(q);
   });
 
-  document.querySelectorAll('#practice-rate-buttons .rate-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const raw = btn.className.includes('mastered') ? 'mastered' : 'shaky';
-      setProgress(q.id, raw);
-      renderSidebar();
-      practiceQueueIndex++;
-      showPracticeQuestion();
+  categories
+    .filter(cat => byCat[cat.id])
+    .forEach(cat => {
+      const label = document.createElement('div');
+      label.className = 'search-group-label';
+      label.textContent = `${cat.icon} ${cat.name}`;
+      body.appendChild(label);
+
+      const list = document.createElement('div');
+      list.className = 'question-list';
+
+      byCat[cat.id].forEach(q => {
+        const status = progress[q.id] || 'unseen';
+        const el = document.createElement('div');
+        el.className = 'q-row';
+        el.innerHTML = `
+          <div class="status-dot ${status}"></div>
+          <span class="diff-badge ${q.difficulty}">${q.difficulty}</span>
+          <div class="q-row-body">
+            <div class="q-text">${escHtml(q.question)}</div>
+            <div class="q-tags">${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}</div>
+          </div>`;
+        el.addEventListener('click', () => openQuestion(q, q._catId, 'practice', practiceQueue));
+        list.appendChild(el);
+      });
+
+      body.appendChild(list);
     });
-  });
 }
 
 document.getElementById('btn-practice').addEventListener('click', startPractice);
@@ -994,7 +1022,7 @@ function renderSearch(query) {
         </div>`;
       el.addEventListener('click', () => {
         document.getElementById('search').value = '';
-        openQuestion(q, catId, 'welcome');
+        openQuestion(q, catId, 'welcome', matches);
       });
       container.appendChild(el);
     });
