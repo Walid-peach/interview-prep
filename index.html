@@ -264,6 +264,12 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 14px 16px;
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .progress-card:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
     }
     .progress-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .progress-card-name { font-weight: 500; }
@@ -751,14 +757,16 @@ function renderWelcome() {
     const qs = questions[cat.id] || [];
     const m = qs.filter(q => progress[q.id] === 'mastered').length;
     const pct = qs.length ? Math.round((m / qs.length) * 100) : 0;
-    cards.innerHTML += `
-      <div class="progress-card">
-        <div class="progress-card-header">
-          <span class="progress-card-name">${cat.icon} ${cat.name}</span>
-          <span class="progress-card-count">${m} / ${qs.length}</span>
-        </div>
-        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
-      </div>`;
+    const card = document.createElement('div');
+    card.className = 'progress-card';
+    card.innerHTML = `
+      <div class="progress-card-header">
+        <span class="progress-card-name">${cat.icon} ${cat.name}</span>
+        <span class="progress-card-count">${m} / ${qs.length}</span>
+      </div>
+      <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%"></div></div>`;
+    card.addEventListener('click', () => openCategory(cat.id));
+    cards.appendChild(card);
   });
 }
 
