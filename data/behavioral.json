@@ -1,23 +1,212 @@
 [
   {
     "id": "behavioral-001",
-    "question": "Tell me about a time you had to make a difficult technical decision under uncertainty.",
-    "answer": "**What the interviewer is looking for:** Comfort with ambiguity, structured reasoning, willingness to own a call even without full information, and the ability to learn from outcomes.\n\n**STAR structure:**\n\n**Situation:** Set the context — what system or project, what was at stake, and why the decision was hard. The difficulty should be real: incomplete data, conflicting tradeoffs, or irreversibility. Avoid scenarios where the \"hard\" part was just extra work.\n\n**Task:** Be specific about what you personally needed to decide, not what the team was doing. Interviewers want to understand your agency.\n\n**Action:** This is the core of your answer — spend 60% of your time here.\n- What options did you identify and how did you frame the tradeoffs?\n- What information did you seek out, and what did you decide to act on despite not knowing?\n- Who did you consult and how did you weigh their input?\n- How did you communicate the decision and the uncertainty around it?\n\n**Result:** Quantify if possible. But also address: what happened to the uncertainty? Did your bet pay off, and what did you learn?\n\n**Tips for data engineering specifically:**\n- Good examples: choosing a streaming vs. batch architecture, picking a data warehouse, deciding whether to rewrite a legacy pipeline or patch it, adopting a new open-source format before it's stable.\n- Avoid: decisions that were obviously correct in hindsight with no real tradeoff — those read as low-stakes.",
+    "question": "Tell me about a time you led a technical migration with a measurable business impact, like your migration of 50+ pipelines from on-prem Airflow/MinIO to AWS/Databricks.",
+    "answer_guidance": "Use this to show leadership, not only technical execution. Structure it with STAR. Situation: Socotec had 50+ pipelines running on an on-prem datalake with Airflow and MinIO. Task: migrate and modernize the platform without breaking production workloads. Action: explain how you prioritized pipelines, coordinated with stakeholders, redesigned the architecture around Medallion and Delta Lake, and monitored runtime and cost. Result: highlight the 50% runtime reduction and 25% cloud cost reduction. A strong answer should show that you were not just moving code, but reducing operational risk and improving scalability. Interviewers penalize vague answers like 'we migrated to Databricks and it was faster.' They want ownership, decisions, trade-offs, and measurable outcomes. Key phrase: 'The migration was not only a technical move; it was an opportunity to redesign how the platform operated.'",
+    "what_they_are_probing": "They are assessing ownership, leadership, ability to deliver business impact, and whether you understand the consequences of architectural decisions.",
     "difficulty": "medium",
-    "tags": ["decision-making", "ambiguity", "ownership", "star"]
+    "tags": [
+      "leadership",
+      "migration",
+      "impact",
+      "databricks"
+    ]
   },
   {
     "id": "behavioral-002",
-    "question": "Describe a situation where you had a conflict with a colleague. How did you handle it?",
-    "answer": "**What the interviewer is looking for:** Emotional maturity, directness, ability to separate the technical from the personal, and evidence that you resolve rather than avoid conflict.\n\n**STAR structure:**\n\n**Situation:** Briefly explain the context — team size, relationship to the colleague (peer, senior, cross-functional), and the nature of the disagreement. Be honest that it was a conflict; don't soften it into a \"difference of opinion\" if it was genuinely tense.\n\n**Task:** What was the goal you were each trying to achieve? Frame the conflict as two people wanting good outcomes via different means — this shows maturity and keeps you from sounding like you're blaming the other person.\n\n**Action:** What did you concretely do?\n- Did you address it directly or let it fester? (Direct is better.)\n- How did you make the other person feel heard before pushing your view?\n- Did you find a neutral third party, shared criteria, or a time-boxed experiment to break the deadlock?\n- Did you change your mind at any point? (Showing this is a strength, not a weakness.)\n\n**Result:** What was the resolution? Ideally the working relationship improved, not just the technical outcome. Mention what you'd do differently.\n\n**Tips:**\n- Do NOT pick a conflict where you were simply right and they were wrong. The best stories have some legitimate merit on both sides.\n- Avoid: vague answers like \"we talked it through.\" Name what you actually said or proposed.\n- Red flag to avoid: conflict with a manager where you went around them — unless you have a genuinely compelling reason and good outcome.",
-    "difficulty": "medium",
-    "tags": ["conflict", "collaboration", "communication", "star"]
+    "question": "Tell me about a time you had to mentor or support less experienced team members, like when you supervised two alternants during the Finance Analytics International program.",
+    "answer_guidance": "This is a leadership and communication question. Use STAR. Situation: in the Finance Analytics International program, you were not only developing Airflow and Spark pipelines, but also mentoring two alternants. Task: ensure delivery while helping them grow. Action: describe how you split tasks, reviewed code, explained architecture decisions, created safe scopes for them, and gave feedback. Result: connect their contribution to the project success, such as more reliable finance reporting across 18 countries and 12 currencies. A strong answer should show patience, structure, and accountability. Avoid making it sound like you simply delegated low-value work. Interviewers penalize answers where mentorship is only described as 'I helped them when blocked.' They want to see repeatable leadership habits. Key phrase: 'I tried to give them ownership with guardrails, not just tasks to execute.'",
+    "what_they_are_probing": "They want to know if you can raise the level of a team, communicate clearly, and manage delivery through others.",
+    "difficulty": "easy",
+    "tags": [
+      "mentoring",
+      "leadership",
+      "communication",
+      "finance"
+    ]
   },
   {
     "id": "behavioral-003",
-    "question": "Tell me about a project that failed. What happened and what did you learn?",
-    "answer": "**What the interviewer is looking for:** Self-awareness, intellectual honesty, ability to extract signal from failure, and evidence that you don't repeat mistakes. This question is a trap for people who deflect blame or dress up a success as a failure.\n\n**STAR structure:**\n\n**Situation:** Pick a real failure — not a near-miss that you caught in time, and not a team failure where you personally did nothing wrong. Interviewers can tell. Brief context on the project scope and what success would have looked like.\n\n**Task:** What were you personally responsible for? Be specific — owning an entire project is different from owning the data modeling layer.\n\n**Action:** Walk through the actual sequence of events. What decisions were made, by whom, and why did they seem reasonable at the time? Avoid the temptation to narrate in hindsight — explain what you knew then.\n\n**Result:** \n- What was the impact? (Missed deadline, wasted engineering months, data quality incident, cancelled project.)\n- What did the postmortem reveal?\n- What did you personally change afterward — in your process, your communication, your technical approach?\n\n**Tips:**\n- The retrospective is where you're evaluated. Vague \"I learned to communicate better\" is weak. \"I now write a one-pager before any project longer than two weeks and share it for async review\" is strong.\n- Data engineering-specific examples that work well: a migration that caused a production outage, a data quality issue that wasn't caught before stakeholders saw it, a pipeline rebuild that took 3× longer than estimated.\n- Avoid: blaming tooling, org dysfunction, or other people as the primary cause unless your lesson is about navigating those constraints.",
+    "question": "Describe a time you had to convince stakeholders to move away from Excel-based reporting, like in your fleet management project.",
+    "answer_guidance": "This question tests stakeholder management. Use STAR. Situation: fleet management was handled through Excel for fuel, claims, and vehicle tracking. Task: replace that with a centralized ELT pipeline and Power BI dashboards. Action: explain how you understood stakeholder pain points, standardized the data, built trusted historical tables, and delivered dashboards that answered operational questions. Result: mention the 10M+ rows/month pipeline, three Power BI dashboards, and the 9% average reduction in claim cost per vehicle. A strong answer should show that adoption was as important as the technical build. Interviewers penalize answers that make users sound wrong for using Excel. Instead, explain that Excel was useful at first but had reached its limit. Key phrase: 'I did not sell the data platform as a technical replacement for Excel; I sold it as a more reliable way to make operational decisions.'",
+    "what_they_are_probing": "They are assessing your ability to drive change, gain user trust, and connect data engineering to business outcomes.",
+    "difficulty": "medium",
+    "tags": [
+      "stakeholders",
+      "change-management",
+      "power-bi",
+      "operations"
+    ]
+  },
+  {
+    "id": "behavioral-004",
+    "question": "Tell me about a time you had to balance cost and reliability, like your DeliverMe project where you self-hosted Airflow on Compute Engine and reduced costs by around 80%.",
+    "answer_guidance": "Use this answer to show trade-off thinking. STAR structure: Situation: DeliverMe needed a cloud analytics architecture using MySQL/Cloud SQL, GCS, BigQuery, Airflow, and Superset. Task: deliver reliable orchestration while keeping costs under control. Action: explain why self-hosted Airflow via Docker on Compute Engine made sense for the scale and maturity of the project, and how you added monitoring through email or Slack alerts. Result: around 80% cost reduction compared with a managed solution. A strong answer should also mention the downside: self-hosting means you own patching, monitoring, upgrades, and availability. Interviewers penalize answers that present the cheapest option as automatically the best option. Key phrase: 'The decision was not managed versus self-hosted in absolute terms; it was about the right operational trade-off for that project scale.'",
+    "what_they_are_probing": "They want to know if you can make practical architecture decisions under constraints and acknowledge trade-offs honestly.",
+    "difficulty": "medium",
+    "tags": [
+      "cost",
+      "tradeoffs",
+      "airflow",
+      "gcp"
+    ]
+  },
+  {
+    "id": "behavioral-005",
+    "question": "Tell me about a time you handled a high-stakes finance reporting project, like the international finance analytics program covering 18 countries and 12 currencies.",
+    "answer_guidance": "This answer should emphasize reliability, precision, and stakeholder trust. Use STAR. Situation: you worked on unifying international finance reporting, ingesting financial data and exchange rates through the Kyriba API. Task: make group KPIs reliable across countries and currencies. Action: describe how you designed Airflow DAGs, built Spark transformations, implemented Medallion architecture, and created Power BI dashboards with access governance by country or direction. Result: mention reduced closing cycle and coverage of 18 countries and 12 currencies. Interviewers penalize vague statements like 'I made finance dashboards.' They want to hear how you controlled risk: reconciliation, exchange-rate completeness, access control, and repeatable refreshes. Key phrase: 'In finance data, being fast is not enough; the pipeline must be explainable, auditable, and trusted.'",
+    "what_they_are_probing": "They are assessing your ability to work in sensitive business domains where correctness, governance, and trust matter.",
+    "difficulty": "medium",
+    "tags": [
+      "finance",
+      "stakeholders",
+      "governance",
+      "reliability"
+    ]
+  },
+  {
+    "id": "behavioral-006",
+    "question": "Describe a time you had to work with ambiguity or incomplete requirements, for example when building the Cockpit Performance Administrative for the lead → prospection → commande cycle.",
+    "answer_guidance": "Use this to show product thinking. STAR: Situation: the cockpit had to monitor an administrative process from lead to prospection to order, with KPIs such as DSO, overdue rate, and SLA J+1. Task: transform a business process into reliable data indicators. Action: explain how you clarified definitions, aligned stakeholders on KPI meaning, created the end-to-end pipeline, industrialized it with Terraform and GitLab CI/CD, and added proactive alerts for refresh delays and volume anomalies. Result: reduced reporting production time and improved operational steering. Interviewers penalize jumping directly to implementation without discussing how you clarified metric definitions. They also penalize ignoring ambiguity in business terms. Key phrase: 'Before building the pipeline, I had to turn business vocabulary into stable data definitions.'",
+    "what_they_are_probing": "They want to know if you can structure ambiguity, define metrics clearly, and turn business processes into reliable data products.",
+    "difficulty": "medium",
+    "tags": [
+      "ambiguity",
+      "kpi",
+      "stakeholders",
+      "reporting"
+    ]
+  },
+  {
+    "id": "behavioral-007",
+    "question": "Tell me about a time you had to learn a new platform or technology quickly, like your move toward AWS/Databricks, Delta Live Tables, Unity Catalog, or Fivetran.",
+    "answer_guidance": "A strong answer should show learning speed and practical application. STAR: Situation: your background includes AWS, GCP, Databricks, dbt, Airflow, Spark, and cloud migrations. Task: quickly become productive with tools needed for the Socotec migration program. Action: explain how you learned by building production pipelines, reading documentation, testing patterns, asking the right questions, and validating behavior with small proof-of-concepts before scaling. Result: you contributed to migrating 50+ pipelines and improving runtime and cost. Interviewers penalize saying only 'I am a fast learner' without evidence. They also penalize learning that stays theoretical. Key phrase: 'I learn new platforms by connecting concepts I already know, then validating them on a small production-like use case.'",
+    "what_they_are_probing": "They are checking adaptability, learning method, and whether you can become effective in changing technical environments.",
     "difficulty": "easy",
-    "tags": ["failure", "growth", "self-awareness", "star"]
+    "tags": [
+      "learning",
+      "adaptability",
+      "databricks",
+      "cloud"
+    ]
+  },
+  {
+    "id": "behavioral-008",
+    "question": "Tell me about a time you had to create trust in data quality, like in your MonÉlu project where you used dbt Core and Soda for parliamentary data.",
+    "answer_guidance": "This is a strong behavioral answer because it connects personal initiative with engineering discipline. STAR: Situation: MonÉlu uses open Assemblée Nationale data, streaming vote ingestion, and a chatbot to query elected officials. Task: make public civic data reliable enough for users to trust. Action: explain how you used dbt Core and Soda to validate data, created deterministic structured facts for votes, and separated them from the RAG pipeline for legislative texts. Result: users can receive vote alerts in under 5 minutes and ask natural-language questions with more confidence. Interviewers penalize treating a personal project as less rigorous than professional work. Show that you applied production-like practices. Key phrase: 'Even in a personal project, I treated data quality as part of the product, not as an afterthought.'",
+    "what_they_are_probing": "They want to see initiative, product mindset, and whether you apply engineering standards outside formal work settings.",
+    "difficulty": "medium",
+    "tags": [
+      "data-quality",
+      "personal-project",
+      "ownership",
+      "rag"
+    ]
+  },
+  {
+    "id": "behavioral-009",
+    "question": "Describe a time you had to expose data to non-data systems or users, like your Flask API for client scoring KPIs at xHub for M2T/Banque Populaire.",
+    "answer_guidance": "Use this to show you can think beyond pipelines and dashboards. STAR: Situation: scoring teams needed reliable access to centralized client KPIs. Task: expose indicators to tools used for credit decisioning. Action: describe how you collected and normalized data, automated processing, stored serving-ready outputs in MongoDB, and exposed KPIs through a Flask API. Result: manual manipulation was removed and teams gained near-real-time access to indicators. A strong answer should mention reliability, API contracts, data freshness, and what happens if a KPI is missing or stale. Interviewers penalize describing only endpoint implementation. They want to see that you understand the full serving lifecycle. Key phrase: 'The API was not just a technical endpoint; it was the serving layer of the data product.'",
+    "what_they_are_probing": "They are assessing whether you can design and communicate data products that serve operational use cases, not only analytics.",
+    "difficulty": "medium",
+    "tags": [
+      "api",
+      "data-product",
+      "scoring",
+      "communication"
+    ]
+  },
+  {
+    "id": "behavioral-010",
+    "question": "Why did you move from freelance and earlier data engineering roles into a Cloud Data Engineer / data project lead role, and how does that career path shape the way you work today?",
+    "answer_guidance": "This is a career motivation question. Build a coherent story using your CV. Start with early hands-on data engineering at DeliverMe and xHub, where you built pipelines, APIs, Airflow orchestration, and cloud analytics foundations. Then mention freelance work at Socotec Gestion DSI, where you industrialized reporting with Terraform, GitLab CI/CD, and alerting. Finally, connect that to your current Socotec role as Cloud Data Engineer and project lead, where you handle migration, governance, mentoring, and measurable outcomes. A strong answer should show progression: from building pipelines, to industrializing them, to owning platforms and leading delivery. Interviewers penalize a scattered story or saying you changed roles only for better tools. Key phrase: 'My career moved from building data pipelines to owning the reliability, governance, and business impact of data platforms.'",
+    "what_they_are_probing": "They are assessing motivation, seniority trajectory, self-awareness, and whether your career choices align with the role.",
+    "difficulty": "easy",
+    "tags": [
+      "career",
+      "motivation",
+      "leadership",
+      "growth"
+    ]
+  },
+  {
+    "id": "behavioral-011",
+    "question": "Tell me about a time you improved a system but also had to prove the improvement with numbers, like your 50% runtime reduction and 25% cloud cost reduction during the AWS/Databricks migration.",
+    "answer_guidance": "Use this answer to show that you measure impact, not just deliver technical changes. Structure it with STAR. Situation: 50+ pipelines were running on an on-prem datalake with Airflow and MinIO. Task: migrate to AWS/Databricks while improving performance and cost. Action: explain the concrete actions: redesigning the architecture around Medallion, using Delta Lake, improving Spark transformations, separating workloads, and tracking runtime/cost before and after. Result: emphasize the 50% runtime reduction and 25% platform cost reduction. A strong answer should include how you measured the baseline and how you made sure the new pipelines were functionally equivalent. Interviewers penalize candidates who claim impressive results without explaining measurement, validation, or their own role. Key phrase: 'I treated performance improvement as an engineering result that had to be measured, not just felt by the team.'",
+    "what_they_are_probing": "They are assessing whether you can quantify impact, validate results, and connect engineering decisions to business outcomes.",
+    "difficulty": "medium",
+    "tags": ["impact", "metrics", "migration", "performance"]
+  },
+  {
+    "id": "behavioral-012",
+    "question": "Tell me about a time you had to prioritize between speed of delivery and long-term maintainability, for example while migrating or industrializing pipelines with Airflow, Spark, Delta Lake, Terraform, or GitLab CI/CD.",
+    "answer_guidance": "A strong answer should show that you can make pragmatic trade-offs. Use STAR. Situation: you worked on several industrialized data platforms, including the Socotec migration, Cockpit Performance Administrative, and finance analytics pipelines. Task: deliver value quickly while avoiding fragile pipelines. Action: explain how you chose where to move fast and where to invest in maintainability: CI/CD, Terraform, modular code, alerting, data quality checks, and clear pipeline ownership. Result: more reliable delivery, reduced reporting production time, and scalable platform foundations. Interviewers penalize answers that sound too perfectionist or too rushed. They want someone who knows when to build a clean foundation and when to deliver an incremental solution. Key phrase: 'I try to optimize for the next team that will operate the pipeline, not only for the first delivery date.'",
+    "what_they_are_probing": "They are checking judgment: whether you can balance business deadlines with engineering quality and operational sustainability.",
+    "difficulty": "medium",
+    "tags": ["prioritization", "maintainability", "cicd", "delivery"]
+  },
+  {
+    "id": "behavioral-013",
+    "question": "Describe a time you had to take ownership beyond your formal role, like moving from Data Engineer to Cloud Data Engineer and project lead at Socotec.",
+    "answer_guidance": "Use this to show seniority progression. STAR: Situation: you started with hands-on data engineering work and later became Cloud Data Engineer and data project lead. Task: move beyond individual delivery to owning architecture, coordination, governance, and outcomes. Action: describe how you led migration planning, aligned technical decisions with business needs, coordinated with stakeholders, mentored people, and made platform decisions around AWS, Databricks, Delta Lake, Fivetran, and Unity Catalog. Result: 50+ pipelines migrated, reduced runtime and costs, and stronger governance. Interviewers penalize answers where 'lead' only means attending meetings. Show technical leadership plus delivery accountability. Key phrase: 'My role evolved from building pipelines to owning the reliability and direction of the data platform.'",
+    "what_they_are_probing": "They want to know if you can operate beyond task execution and take ownership of platform-level outcomes.",
+    "difficulty": "medium",
+    "tags": ["ownership", "leadership", "career-growth", "platform"]
+  },
+  {
+    "id": "behavioral-014",
+    "question": "Tell me about a time you had to work with sensitive or governed data, such as finance reporting with RLS or Unity Catalog access governance.",
+    "answer_guidance": "A strong answer should show responsibility and risk awareness. STAR: Situation: you worked on finance analytics across 18 countries and 12 currencies, and later implemented access governance with Unity Catalog and RLS. Task: make data accessible while protecting sensitive information by country, direction, or role. Action: explain how you defined access groups, applied row-level security, controlled permissions, and ensured dashboards exposed only the right scope to each user. Result: business teams could use shared dashboards without compromising access rules. Interviewers penalize candidates who think governance is only the security team's responsibility. They also penalize vague answers like 'we restricted access.' Key phrase: 'Governance should be designed into the data product, not added after the dashboard is already live.'",
+    "what_they_are_probing": "They are assessing whether you understand trust, access control, and governance as part of data engineering delivery.",
+    "difficulty": "medium",
+    "tags": ["governance", "rls", "finance", "security"]
+  },
+  {
+    "id": "behavioral-015",
+    "question": "Tell me about a time you had to debug or improve a pipeline that business users depended on, such as finance KPIs, fleet dashboards, or administrative reporting.",
+    "answer_guidance": "Use this to show calm problem-solving under business pressure. STAR: Situation: choose one project from your CV: Finance Analytics International, fleet management, or Cockpit Performance Administrative. Task: restore or improve trust in data used by business users. Action: explain your debugging path: check orchestration, input freshness, source volume, transformation logic, data quality, KPI definitions, and dashboard refresh. Result: connect the fix to business continuity, such as reducing closing cycle, supporting operational steering, or improving fleet cost management. A strong answer should mention communication: how you explained status to stakeholders while investigating. Interviewers penalize jumping directly to a technical fix without assessing business impact. Key phrase: 'I first identify whether the issue is pipeline health, data health, or metric definition.'",
+    "what_they_are_probing": "They are testing structured debugging, stakeholder communication, and your ability to protect business-critical reporting.",
+    "difficulty": "medium",
+    "tags": ["debugging", "stakeholders", "data-quality", "reporting"]
+  },
+  {
+    "id": "behavioral-016",
+    "question": "Describe a time you had to turn a technical project into a product-like experience for users, like MonÉlu or your scoring KPI API.",
+    "answer_guidance": "A strong answer should show product mindset. STAR: Situation: choose MonÉlu, where users can query elected officials in natural language, or the M2T/Banque Populaire scoring KPI API. Task: make data usable by non-data users or downstream systems. Action: explain how you thought about the user experience, data freshness, reliability, API or chatbot interface, quality checks, and clear outputs. For MonÉlu, mention vote alerting under 5 minutes, Redpanda, Spark Structured Streaming, dbt Core, Soda, pgvector, LangChain, and Mistral 7B. For scoring, mention Flask, MongoDB, and near-real-time KPI access. Result: users consume data as a service, not as raw tables. Interviewers penalize candidates who only describe technical components and forget the user journey. Key phrase: 'The goal was not just to move data; it was to make the data usable at the moment of decision.'",
+    "what_they_are_probing": "They want to see if you can think like a data product owner, not only a pipeline developer.",
+    "difficulty": "medium",
+    "tags": ["product-mindset", "api", "rag", "user-experience"]
+  },
+  {
+    "id": "behavioral-017",
+    "question": "Tell me about a time you had to make a technical decision with imperfect information, such as choosing self-hosted Airflow, using Fivetran, or designing a migration path.",
+    "answer_guidance": "A strong answer should show how you make decisions under uncertainty. STAR: Situation: pick one example from your CV. For DeliverMe, the decision was self-hosted Airflow on Compute Engine instead of a managed solution. For the Databricks migration, the decision involved Fivetran, Delta Lake, and AWS/Databricks. Task: choose an approach before every detail was known. Action: explain your evaluation criteria: cost, reliability, team skills, operational burden, SLA, scalability, and future maintainability. Result: connect to outcomes like 80% cost reduction at DeliverMe or 50% runtime and 25% cost reduction at Socotec. Interviewers penalize hindsight-only answers that make the decision sound obvious. Show what you considered and what risks you accepted. Key phrase: 'I made the decision based on constraints, not tool preference.'",
+    "what_they_are_probing": "They are assessing judgment, risk management, and whether you can make defensible decisions without perfect information.",
+    "difficulty": "medium",
+    "tags": ["decision-making", "tradeoffs", "architecture", "cost"]
+  },
+  {
+    "id": "behavioral-018",
+    "question": "Tell me about a time you improved collaboration or engineering discipline, for example through GitLab CI/CD, GitHub Actions, Docker, Terraform, or code reviews.",
+    "answer_guidance": "Use this to show that you care about how teams deliver, not only what they deliver. STAR: Situation: your CV mentions Terraform, GitLab CI/CD, GitHub Actions, Docker, Kubernetes, and mentoring/code review. Task: improve reliability and repeatability in a data engineering workflow. Action: describe how you used CI/CD, infrastructure-as-code, Dockerized services, automated deployments, or code reviews to reduce manual errors. If using the finance program example, mention mentoring alternants through code reviews. If using the Cockpit project, mention Terraform and GitLab CI/CD. Result: smoother deployments, fewer manual steps, and better team collaboration. Interviewers penalize saying 'we used Git' without explaining workflow discipline. Key phrase: 'Good data engineering is not only the pipeline logic; it is also the delivery system around it.'",
+    "what_they_are_probing": "They want to know if you can raise engineering standards and work effectively in a team environment.",
+    "difficulty": "easy",
+    "tags": ["collaboration", "cicd", "terraform", "code-review"]
+  },
+  {
+    "id": "behavioral-019",
+    "question": "Describe a time you had to explain a technical risk to a non-technical stakeholder, such as data freshness, access governance, cost, or dashboard reliability.",
+    "answer_guidance": "A strong answer should show communication maturity. STAR: Situation: choose a project where non-technical users depended on your work: finance dashboards, fleet dashboards, administrative cockpit, or MonÉlu. Task: explain a risk without overwhelming the stakeholder with technical details. Action: translate the risk into business language: delayed refresh means morning decisions are based on yesterday's data; missing RLS means users could see the wrong country's finance data; high cloud cost means the platform may not scale sustainably. Result: stakeholders understood the trade-off and supported the right decision. Interviewers penalize answers where you sound frustrated with business users. They want someone who can simplify without hiding the truth. Key phrase: 'I translated the technical risk into the business consequence.'",
+    "what_they_are_probing": "They are assessing communication, stakeholder management, and your ability to influence decisions without relying on jargon.",
+    "difficulty": "easy",
+    "tags": ["communication", "stakeholders", "risk", "influence"]
+  },
+  {
+    "id": "behavioral-020",
+    "question": "Tell me about a time you had to prove you could work across multiple domains, from finance and logistics to civic-tech and LLM/RAG projects.",
+    "answer_guidance": "Use this to create a coherent career narrative. STAR: Situation: your CV spans finance analytics, fleet operations, administrative performance, logistics analytics, credit scoring, cloud migration, and MonÉlu. Task: show that you can adapt your data engineering fundamentals to different domains. Action: explain that the domain changes, but the core method remains: clarify business definitions, design reliable ingestion, model trusted data, add governance, monitor quality, and expose the right serving layer. Result: you delivered measurable outcomes across domains: reduced closing cycle, 9% lower claim cost per vehicle, 80% cost reduction in one platform choice, and a civic-tech platform with streaming and RAG. Interviewers penalize a scattered story. Make the pattern obvious. Key phrase: 'The domain changes, but my operating system stays the same: constraints, data contracts, reliable pipelines, and measurable impact.'",
+    "what_they_are_probing": "They are assessing adaptability, senior-level pattern recognition, and whether your diverse experience forms a clear professional story.",
+    "difficulty": "medium",
+    "tags": ["adaptability", "career-story", "impact", "domains"]
   }
 ]
