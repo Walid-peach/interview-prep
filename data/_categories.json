@@ -50,6 +50,11 @@
     "icon": "🏗️"
   },
   {
+    "id": "system-design-data",
+    "name": "System Design Data",
+    "icon": "📊"
+  },
+  {
     "id": "databricks",
     "name": "Databricks",
     "icon": "🧱"
