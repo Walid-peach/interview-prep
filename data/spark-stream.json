@@ -4,139 +4,264 @@
     "question": "What is the architectural difference between legacy Spark Streaming (DStreams) and modern Spark Structured Streaming?",
     "answer": "Legacy **Spark Streaming (DStreams)** was built on the core RDD API. It used a strict micro-batch architecture where the batch interval was defined globally at the SparkContext level. You had to reason about data as discrete chunks of RDDs.\n\n**Spark Structured Streaming** is built on the modern DataFrame and SQL APIs, leveraging the Catalyst Optimizer. It treats live streaming data as a continuously appending, unbounded table. You write standard batch DataFrame queries, and the Spark engine incrementally and continuously updates the result. It decouples the logical query from the physical execution, enabling features like Event-Time processing and Watermarks, which were incredibly difficult to implement in DStreams.\n\n```python\n# Structured Streaming uses the exact same DataFrame API as batch\ndf = spark.readStream.format(\"kafka\").load()\ndf.groupBy(\"action\").count().writeStream.start()\n```\n\n*Follow-up they'll probably ask: What is 'Continuous Processing' mode in Structured Streaming, and when would you use it?*",
     "difficulty": "easy",
-    "tags": ["core-concepts", "architecture"]
+    "tags": [
+      "core-concepts",
+      "architecture"
+    ]
   },
   {
     "id": "spark-stream-002",
     "question": "Explain the three Output Modes in Spark Structured Streaming: Append, Update, and Complete.",
     "answer": "Output modes dictate exactly what data Spark writes to the sink (e.g., S3 or Kafka) after each trigger.\n\n- **Append Mode (Default)**: Only *new* rows appended to the result table since the last trigger are written. Used for standard ETL (e.g., Kafka to Parquet). It cannot be used if your query includes aggregations without watermarks.\n- **Update Mode**: Only the rows in the result table that were *updated* (or inserted) since the last trigger are written. If a count changes from 5 to 6, only that row is output.\n- **Complete Mode**: The *entire* updated result table is written to the sink every single time. This is only allowed for aggregation queries and is typically used for small result sets (e.g., outputting a total daily count to a console or small database table).\n\n*Gotcha: You cannot use Append mode with aggregations unless you define a Watermark. Spark won't know when a group is 'finalized' and safe to append.*",
     "difficulty": "easy",
-    "tags": ["output-modes", "aggregations"]
+    "tags": [
+      "output-modes",
+      "aggregations"
+    ]
   },
   {
     "id": "spark-stream-003",
     "question": "Why is a Checkpoint Directory mandatory in Spark Structured Streaming, and what exactly does it store?",
     "answer": "A Checkpoint Directory is mandatory for fault tolerance and exactly-once processing guarantees. Without it, if your cluster crashes, Spark forgets where it was.\n\nIt stores two critical pieces of information on reliable storage (like HDFS or Amazon S3):\n1. **Offsets:** The exact position the stream has read up to from the source (e.g., Kafka partition offsets). This ensures no data is skipped or processed twice upon restart.\n2. **State:** The intermediate state of stateful operations (like aggregations, joins, or `dropDuplicates`). \n\n```python\nquery = df.writeStream \\\n    .format(\"delta\") \\\n    .option(\"checkpointLocation\", \"s3://bucket/checkpoints/my_query/\") \\\n    .start(\"s3://bucket/output/\")\n```\n\n*Gotcha: The checkpoint directory is heavily bound to the specific query logic. If you significantly change the query (e.g., adding a new grouping column), you cannot reuse the old checkpoint directory; the job will crash.*",
     "difficulty": "easy",
-    "tags": ["fault-tolerance", "checkpoints"]
+    "tags": [
+      "fault-tolerance",
+      "checkpoints"
+    ]
   },
   {
     "id": "spark-stream-004",
     "question": "How do you read streaming data from a Kafka topic in PySpark, and how do you parse the message payload?",
     "answer": "You use `spark.readStream` with the `kafka` format. \n\nKafka stores keys and values as raw binary payloads. When Spark reads them, the resulting DataFrame has columns like `key`, `value`, `topic`, `partition`, and `offset`. \nTo process the actual JSON data, you must cast the binary `value` column to a string, and then use the `from_json` function with a predefined Spark schema to explode the JSON into structured DataFrame columns.\n\n```python\nschema = StructType([StructField(\"user_id\", StringType()), StructField(\"amount\", IntegerType())])\n\nraw_df = spark.readStream \\\n  .format(\"kafka\") \\\n  .option(\"kafka.bootstrap.servers\", \"broker:9092\") \\\n  .option(\"subscribe\", \"transactions\") \\\n  .load()\n\nparsed_df = raw_df.select(\n    from_json(col(\"value\").cast(\"string\"), schema).alias(\"data\")\n).select(\"data.*\")\n```\n\n*Follow-up they'll probably ask: What option do you set if you want to consume the topic from the very beginning instead of the latest offset? (Answer: `startingOffsets: earliest`).*",
     "difficulty": "easy",
-    "tags": ["kafka", "ingestion"]
+    "tags": [
+      "kafka",
+      "ingestion"
+    ]
   },
   {
     "id": "spark-stream-005",
     "question": "What are Watermarks in Structured Streaming, and why are they essential for handling late-arriving data in aggregations?",
     "answer": "When performing windowed aggregations (e.g., counting events per 10-minute window), Spark must keep the state for every window in memory. If a late event arrives 3 hours later, Spark needs that old window state to update the count.\n\nWithout a mechanism to clean up, state would grow infinitely until the cluster OOMs (Out of Memory).\n\nA **Watermark** defines how late data is allowed to be. If you set a watermark of `10 minutes`, Spark tracks the maximum event time seen so far. If `max_event_time` is 12:00 PM, the watermark is 11:50 AM. \n\nAny data arriving older than 11:50 AM is aggressively dropped. More importantly, Spark knows it is safe to purge all state for windows older than the watermark from memory, preventing state bloat.\n\n```python\n# Drop data arriving more than 10 minutes late\nwindowedCounts = df \\\n    .withWatermark(\"timestamp\", \"10 minutes\") \\\n    .groupBy(window(col(\"timestamp\"), \"5 minutes\")) \\\n    .count()\n```\n\n*Gotcha: Watermarks only work if you are grouping by the exact timestamp column specified in the `withWatermark` clause.*",
     "difficulty": "medium",
-    "tags": ["state", "watermarks", "late-data"]
+    "tags": [
+      "state",
+      "watermarks",
+      "late-data"
+    ]
   },
   {
     "id": "spark-stream-006",
     "question": "Explain how Spark Structured Streaming guarantees Exactly-Once processing semantics from end-to-end.",
     "answer": "Exactly-Once is achieved through the integration of three components: the Source, the Engine, and the Sink.\n\n1. **Replayable Source:** The source (like Kafka or Kinesis) must allow Spark to request specific offsets. Spark tracks these offsets in its Write-Ahead Log (WAL) inside the checkpoint directory.\n2. **Deterministic Engine:** The Spark engine ensures that if a task fails, recalculating the data from the exact same offsets will produce the exact same intermediate state.\n3. **Idempotent Sink:** This is the critical final step. The Sink must handle retries without duplicating data. Delta Lake guarantees this natively via optimistic concurrency control and transactional commits. If writing to a relational database, you must use idempotent `UPSERT` (MERGE) logic via `foreachBatch` so that re-writing the same batch of data doesn't duplicate rows.\n\n*Follow-up they'll probably ask: Can you achieve exactly-once if your sink is a standard Kafka topic? (Answer: Yes, but only if you use Kafka's transactional producer APIs).* ",
     "difficulty": "medium",
-    "tags": ["exactly-once", "architecture"]
+    "tags": [
+      "exactly-once",
+      "architecture"
+    ]
   },
   {
     "id": "spark-stream-007",
     "question": "What is the `Trigger.AvailableNow` (formerly `Trigger.Once`) feature, and how does it blur the line between batch and streaming?",
     "answer": "Typically, streaming jobs run 24/7. However, maintaining a 24/7 cluster for a stream that only receives 100 records an hour is highly cost-inefficient.\n\n`Trigger.AvailableNow` allows you to execute a Structured Streaming job as a scheduled batch process (e.g., triggered by Airflow every hour). \n\nWhen the job spins up, it processes all data that has arrived since the last run across multiple micro-batches (managing rate limits gracefully), updates the checkpoint directory, and then gracefully terminates the cluster. \n\nThis blurs the line because you are utilizing the stateful, incremental, exactly-once engine of Structured Streaming, but running it on ephemeral, cost-saving batch compute infrastructure.\n\n```python\nquery = df.writeStream \\\n    .trigger(availableNow=True) \\\n    .format(\"delta\") \\\n    .start(\"s3://path/\")\n```\n\n*Gotcha: `Trigger.Once` processed everything in a single massive micro-batch, causing OOMs. `Trigger.AvailableNow` replaces it by intelligently breaking the backlog into smaller micro-batches based on `maxOffsetsPerTrigger`.*",
     "difficulty": "medium",
-    "tags": ["triggers", "cost-optimization"]
+    "tags": [
+      "triggers",
+      "cost-optimization"
+    ]
   },
   {
     "id": "spark-stream-008",
     "question": "Your streaming job is falling behind Kafka due to traffic spikes. How do you use `maxOffsetsPerTrigger` to stabilize the pipeline?",
     "answer": "During massive traffic spikes, a default micro-batch might try to fetch 50 million records from Kafka at once. This will cause the executors to run out of memory (OOM), crash, and enter a death spiral of failing retries.\n\n`maxOffsetsPerTrigger` acts as a **rate limiter**. \nIf you set it to `100000`, Spark will strictly pull a maximum of 100,000 records across all partitions per micro-batch. The batch completes quickly and safely, commits the checkpoint, and immediately moves to the next batch.\n\nWhile the job will temporarily show increased consumer lag, the cluster remains stable and alive, chewing through the backlog systematically rather than dying from memory exhaustion.\n\n```python\ndf = spark.readStream \\\n  .format(\"kafka\") \\\n  .option(\"maxOffsetsPerTrigger\", 100000) \\\n  ... \n```\n\n*Gotcha: `maxOffsetsPerTrigger` limits the total offsets across ALL partitions. If you have 100 Kafka partitions, setting it to 1000 means Spark pulls just 10 records per partition, massively underutilizing the cluster.*",
     "difficulty": "medium",
-    "tags": ["kafka", "performance", "tuning"]
+    "tags": [
+      "kafka",
+      "performance",
+      "tuning"
+    ]
   },
   {
     "id": "spark-stream-009",
     "question": "How do you implement a Stream-Static Join, and what are its limitations?",
     "answer": "A **Stream-Static Join** joins an unbounded streaming DataFrame (e.g., live transactions) with a bounded static DataFrame (e.g., a dimension table of user demographics loaded from S3).\n\nIt is implemented using a standard DataFrame `.join()` operation. It's incredibly useful for enriching real-time streams with metadata before writing to a sink.\n\n**Limitations:**\n1. Spark assumes the static DataFrame does not change. If the underlying data in S3 changes, the streaming job will NOT automatically pick up the new data unless you restart the query, or unless the static DataFrame is a Delta table read with specific options.\n2. You can only perform **Inner Joins** or **Left Outer Joins** (where the stream is on the left). Right or Full Outer joins are forbidden because Spark cannot hold the entire stream in memory waiting for a static match that might never arrive.\n\n*Follow-up they'll probably ask: How do you ensure the static dimension table is refreshed without stopping the stream?*",
     "difficulty": "medium",
-    "tags": ["joins", "architecture"]
+    "tags": [
+      "joins",
+      "architecture"
+    ]
   },
   {
     "id": "spark-stream-010",
     "question": "Structured Streaming doesn't natively support `MERGE` or `UPSERT` operations into relational databases directly. How do you implement UPSERT logic using `foreachBatch`?",
     "answer": "The `foreachBatch` sink allows you to execute arbitrary Python or SQL code on the output of every micro-batch. It provides two parameters: `microBatchDF` (a standard, static DataFrame of the current batch) and `batchId`.\n\nTo implement UPSERT logic (e.g., merging stream data into a Delta Lake table), you pass a function to `foreachBatch` that takes the `microBatchDF` and executes the Delta `MERGE INTO` API.\n\n```python\ndef upsertToDelta(microBatchDF, batchId):\n    # Dedup within the microbatch first\n    dedupedDF = microBatchDF.dropDuplicates([\"user_id\"])\n    \n    # Execute the merge against the target Delta table\n    deltaTable.alias(\"t\").merge(\n        dedupedDF.alias(\"s\"),\n        \"t.user_id = s.user_id\"\n    ).whenMatchedUpdateAll() \\\n     .whenNotMatchedInsertAll() \\\n     .execute()\n\nquery = streamDF.writeStream.foreachBatch(upsertToDelta).start()\n```\n\n*Gotcha: If the micro-batch contains multiple updates for the same `user_id`, the Delta merge will fail with a non-deterministic update error. You must explicitly `dropDuplicates` or window-rank the microBatchDF before merging.*",
     "difficulty": "medium",
-    "tags": ["sinks", "delta-lake", "upsert"]
+    "tags": [
+      "sinks",
+      "delta-lake",
+      "upsert"
+    ]
   },
   {
     "id": "spark-stream-011",
     "question": "What is the difference between `HDFSBackedStateStore` and `RocksDBStateStore`, and when should you switch?",
     "answer": "Structured Streaming uses a **State Store** to manage stateful operations (aggregations, joins) across micro-batches.\n\nBy default, Spark uses the `HDFSBackedStateStore`. It keeps all state entirely in the JVM heap memory of the executors and backs it up to HDFS/S3 during checkpoints. \n- **Problem:** If you have massive state (e.g., a 30-day windowed aggregation or a massive stream-stream join), the JVM heap will fill up, causing extreme Garbage Collection pauses and OOM crashes.\n\nThe **`RocksDBStateStore`** integrates embedded RocksDB into the executors. It keeps the state on the executor's local disk/SSD and only caches hot data in off-heap memory. \n- **Solution:** You switch to RocksDB (`spark.sql.streaming.stateStore.providerClass`) when state size grows beyond a few Gigabytes, trading a slight CPU penalty for the ability to manage terabytes of state reliably without JVM crashes.\n\n*Follow-up they'll probably ask: Does RocksDB eliminate the need for Watermarks? (Answer: No, RocksDB prevents OOMs, but state will still grow infinitely and fill the disk without watermarks).* ",
     "difficulty": "medium",
-    "tags": ["state", "performance", "rocksdb"]
+    "tags": [
+      "state",
+      "performance",
+      "rocksdb"
+    ]
   },
   {
     "id": "spark-stream-012",
     "question": "Your upstream application adds a new column to the Kafka JSON payload. How do you handle schema evolution gracefully in your Delta Lake streaming sink?",
     "answer": "By default, if a streaming job attempts to write a new column to a Delta table that doesn't exist in the target schema, the job will crash with an `AnalysisException`.\n\nTo handle this gracefully without manual intervention, you use the `mergeSchema` option in your `writeStream`. \n\nWhen `mergeSchema` is set to `true`, the Delta sink will automatically safely update the target table's schema, adding the new column, and continue processing the stream without dropping data or crashing the pipeline.\n\n```python\nquery = df.writeStream \\\n    .format(\"delta\") \\\n    .option(\"checkpointLocation\", \"s3://bucket/_checkpoints/\") \\\n    .option(\"mergeSchema\", \"true\") \\\n    .start(\"s3://bucket/delta_table/\")\n```\n\n*Gotcha: `mergeSchema` only handles adding new columns or relaxing types (e.g., Int to Long). It cannot handle dropping columns or renaming them; those require a manual table overwrite and a streaming checkpoint reset.*",
     "difficulty": "medium",
-    "tags": ["delta-lake", "schema-evolution"]
+    "tags": [
+      "delta-lake",
+      "schema-evolution"
+    ]
   },
   {
     "id": "spark-stream-013",
     "question": "Your streaming job crashes with `failOnDataLoss`. What does this mean, and how do you recover the pipeline?",
     "answer": "When Spark reads from Kafka, it tracks the requested offsets in its checkpoint. If the job is paused for 8 days, but Kafka's retention policy is only 7 days, the older offsets are deleted from the Kafka broker.\n\nWhen Spark restarts, it requests an offset that no longer exists. By default, `failOnDataLoss` is `true`, so Spark instantly crashes the job to alert you that data has been permanently missed.\n\nTo recover the pipeline, you must acknowledge the data loss. You set `.option(\"failOnDataLoss\", \"false\")` in your `readStream`. Spark will suppress the exception, skip the missing offsets, and start reading from the earliest available offset currently remaining in Kafka.\n\n*Gotcha: Setting `failOnDataLoss=false` from day one is an anti-pattern. You want the job to crash and page you if data is lost, so you can investigate before deciding to skip it.*",
     "difficulty": "medium",
-    "tags": ["kafka", "error-handling"]
+    "tags": [
+      "kafka",
+      "error-handling"
+    ]
   },
   {
     "id": "spark-stream-014",
     "question": "You are performing a `groupBy().count()` aggregation on a stream without a Watermark. What output mode must you use, and what is the severe risk?",
     "answer": "If you do not define a Watermark, you **must** use **Complete Mode** or **Update Mode**. Append mode is forbidden because without a watermark, Spark never knows when a group is finalized, so it can never safely \"append\" it to the sink.\n\nThe severe risk is **Infinite State Bloat**. \n\nBecause there is no watermark, Spark assumes data can arrive infinitely late. It must keep every single group key and its count in the executor's state store (memory or RocksDB) forever. As the cardinality of your grouping key increases over days or weeks, the state will grow indefinitely until the cluster inevitably crashes with an OutOfMemory error or disk exhaustion.\n\n*Follow-up they'll probably ask: Is it safe to do a non-windowed aggregation (like grouping by country) without a watermark? (Answer: Yes, because the cardinality of countries is extremely small and static, so state size remains tiny).* ",
     "difficulty": "medium",
-    "tags": ["state", "aggregations", "watermarks"]
+    "tags": [
+      "state",
+      "aggregations",
+      "watermarks"
+    ]
   },
   {
     "id": "spark-stream-015",
     "question": "You deployed a streaming job with `spark.sql.shuffle.partitions = 200`. After a month, data volume 10x's, so you restart the job with `partitions = 1000`. The job crashes on startup. Why?",
     "answer": "This is a notorious checkpointing trap in Spark Structured Streaming.\n\nWhen a streaming job performs a stateful operation (like an aggregation or join), it partitions the state store across the executors based on the `spark.sql.shuffle.partitions` configuration. This physical layout is permanently saved into the checkpoint directory metadata.\n\nIf you stop the job, change `shuffle.partitions` to 1000, and restart it using the *same* checkpoint directory, Spark detects a mismatch. It cannot magically re-shuffle the historical state from 200 physical state store files into 1000 files on the fly. It throws an exception and crashes.\n\nTo fix this, you must either wipe the checkpoint directory (losing exactly-once guarantees and historical state) or refrain from changing `shuffle.partitions` on an active stateful query.\n\n*Gotcha: You should always anticipate future growth and set `shuffle.partitions` slightly higher than needed on day one for stateful streaming jobs.*",
     "difficulty": "medium",
-    "tags": ["checkpoints", "performance", "tuning"]
+    "tags": [
+      "checkpoints",
+      "performance",
+      "tuning"
+    ]
   },
   {
     "id": "spark-stream-016",
     "question": "Explain the complexities of a Stream-Stream Join. Why are two distinct watermarks required?",
     "answer": "A **Stream-Stream Join** connects two unbounded streams (e.g., joining an `ad_clicks` stream with an `ad_impressions` stream). \n\nSpark must buffer records from both streams in state because an impression might arrive 5 minutes before the click, or vice-versa. Without constraints, Spark would have to buffer all records forever to see if a match arrives.\n\nTo bound the state, you must provide three things:\n1. A **Watermark on Stream A** (Late data threshold for clicks)\n2. A **Watermark on Stream B** (Late data threshold for impressions)\n3. A **Time Range Condition** in the join clause (e.g., `click.time BETWEEN imp.time AND imp.time + INTERVAL 1 HOUR`).\n\nSpark uses the two watermarks and the time constraint to mathematically calculate exactly when an old impression can be safely deleted from state because it's impossible for a valid click to arrive for it anymore.\n\n*Follow-up they'll probably ask: What kind of joins are supported in Stream-Stream? (Answer: Inner joins are fully supported. Outer joins have complex restrictions requiring watermarks).* ",
     "difficulty": "medium",
-    "tags": ["joins", "state"]
+    "tags": [
+      "joins",
+      "state"
+    ]
   },
   {
     "id": "spark-stream-017",
     "question": "You push a code update that changes the grouping logic of an existing stateful streaming job. Upon deploy, the job crashes with a state schema mismatch. How do you recover?",
     "answer": "This is an unrecoverable checkpoint state error. The checkpoint directory stores the binary state of the old grouping logic. The new code expects a different schema in the state store. Spark cannot reconcile them.\n\nYou have two recovery paths, both painful:\n\n1. **State Reset (Data Loss):** Delete the checkpoint directory entirely and restart the job. If consuming from Kafka, you will process from the latest offset (losing the backlog) or the earliest offset (creating massive duplicates downstream). \n2. **Parallel Deployment (Zero Downtime):** Deploy the new code as a completely separate application with a *new* checkpoint directory and *new* target output table. Let the old job run until the pipeline drains or state expires, then shut it down and point downstream consumers to the new table.\n\n*Gotcha: Changing non-stateful logic (like adding a `.filter()` or adding a new column to a `.select()`) is perfectly safe and will not break the checkpoint.*",
     "difficulty": "hard",
-    "tags": ["checkpoints", "error-handling", "architecture"]
+    "tags": [
+      "checkpoints",
+      "error-handling",
+      "architecture"
+    ]
   },
   {
     "id": "spark-stream-018",
     "question": "Your Stream-Stream join job is experiencing massive state bloat leading to disk exhaustion, despite having watermarks configured. What edge cases cause watermarks to fail at clearing state?",
     "answer": "Watermarks advance based on the *maximum event time* seen across all partitions. \n\nIf you have a massive Stream-Stream join reading from a heavily partitioned Kafka topic, **idle partitions** will cause state bloat. If Partition 0 receives no data for 2 hours, the watermark for the entire stream is held back. Because the watermark doesn't advance, Spark cannot clear the state for *any* partition, leading to rapid disk exhaustion on the RocksDB state store.\n\nTo fix this in modern Spark versions, you use the `spark.sql.streaming.multipleWatermarkPolicy` or explicitly configure the source to ignore idle partitions using `.option(\"kafka.isolation.level\", \"read_committed\")` combined with idle timeouts, forcing the watermark to advance based on active partitions.\n\n*Gotcha: Out-of-order data arriving from different upstream microservices can also hold back the watermark artificially if the skew between timestamps is immense.*",
     "difficulty": "hard",
-    "tags": ["state", "watermarks", "performance"]
+    "tags": [
+      "state",
+      "watermarks",
+      "performance"
+    ]
   },
   {
     "id": "spark-stream-019",
     "question": "You are deploying a streaming job on Kubernetes. When you update the deployment, Kubernetes sends a SIGTERM, and Spark drops data mid-flight. How do you achieve a truly graceful shutdown?",
     "answer": "By default, a Kubernetes `SIGTERM` instantly murders the Spark JVM. Spark's internal graceful shutdown hooks never get time to execute.\n\nTo achieve exactly-once semantics without manual WAL recovery overhead:\n1. Enable Spark's graceful shutdown flag: `spark.streaming.stopGracefullyOnShutdown=true`. This tells the StreamingContext to finish the active micro-batch before exiting.\n2. **Crucially**, trap the K8s `SIGTERM` signal using a **`preStop` hook** in the driver Pod spec. The `preStop` hook must execute a `sleep` command (e.g., `sleep 60`), which blocks K8s from sending the lethal `SIGKILL` signal, giving the JVM time to finish the batch cleanly.\n3. Ensure the Kubernetes `terminationGracePeriodSeconds` is set higher than your longest expected micro-batch duration (e.g., `120` seconds).\n\n```yaml\nlifecycle:\n  preStop:\n    exec:\n      command: [\"sh\", \"-c\", \"sleep 60\"]\n```\n\n*Follow-up they'll probably ask: What happens if a micro-batch takes 5 minutes, but `terminationGracePeriodSeconds` is 120s? (Answer: K8s will brutally kill the pod after 120s regardless, corrupting the inflight batch).* ",
     "difficulty": "hard",
-    "tags": ["kubernetes", "lifecycle", "architecture"]
+    "tags": [
+      "kubernetes",
+      "lifecycle",
+      "architecture"
+    ]
   },
   {
     "id": "spark-stream-020",
     "question": "You are reading a 500-partition Kafka topic into a 10-core Spark cluster. Throughput is terrible. How do Kafka partitions, Spark cores, and `shuffle.partitions` interact to cause this bottleneck?",
     "answer": "When Spark reads from Kafka, a 1:1 mapping is created between Kafka Partitions and Spark Tasks. \nIf you have 500 Kafka partitions, Spark creates 500 concurrent Tasks for the micro-batch. \n\nHowever, your cluster only has 10 cores. This means Spark can only process 10 tasks concurrently. The remaining 490 tasks are queued. This causes massive task scheduling overhead and severe CPU context switching, tanking throughput.\n\nIf the job then hits a stateful aggregation, it shuffles data into `spark.sql.shuffle.partitions` (default 200). The 10 cores now struggle to process 200 tiny shuffle partitions, creating a massive small-files IO bottleneck on the state store.\n\nTo fix this:\n1. **Coalesce** the read: If no heavy compute is needed before the shuffle, you can use `.option(\"minPartitions\", ...) ` in newer Spark versions, or simply repartition down to match core count if shuffle isn't immediately required.\n2. Tune `shuffle.partitions` to match a multiple of your core count (e.g., 20 or 40) so the state store operations are optimally chunked for the hardware.\n\n*Gotcha: Re-partitioning data immediately after reading from Kafka forces a network shuffle, which might actually be slower than just letting the 10 cores chew through the 500 tasks sequentially.*",
     "difficulty": "hard",
-    "tags": ["kafka", "performance", "tuning"]
+    "tags": [
+      "kafka",
+      "performance",
+      "tuning"
+    ]
+  },
+  {
+    "id": "spark-stream-021",
+    "difficulty": "hard",
+    "tags": [
+      "stateful",
+      "processing",
+      "design"
+    ],
+    "question": "Implement session detection on clickstream data using flatMapGroupsWithState: a session ends after 30 minutes of inactivity, and you must emit a session summary when it closes. What happens to state that never expires?",
+    "answer": "Session detection requires arbitrary stateful processing. Watermarks alone cannot close sessions because closure depends on inactivity relative to the previous event, not just event time.\n\n**State definition and implementation:**\n```python\nfrom pyspark.sql.streaming.state import GroupStateTimeout, GroupState\nfrom dataclasses import dataclass\nfrom typing import Iterator\nimport datetime\n\n@dataclass\nclass SessionState:\n    session_id: str\n    user_id: str\n    start_time: datetime.datetime\n    last_event_time: datetime.datetime\n    event_count: int\n\ndef update_session(user_id: str, events: Iterator, state: GroupState) -> Iterator:\n    SESSION_TIMEOUT_MS = 30 * 60 * 1000\n\n    if state.hasTimedOut:\n        if state.exists:\n            session = state.get\n            yield (session.session_id, session.user_id,\n                   session.start_time, session.last_event_time,\n                   session.event_count, \"timeout_close\")\n            state.remove()\n        return\n\n    event_list = list(events)\n\n    if not state.exists:\n        first = event_list[0]\n        new_state = SessionState(\n            session_id=f\"{user_id}_{first.event_time.timestamp()}\",\n            user_id=user_id,\n            start_time=first.event_time,\n            last_event_time=first.event_time,\n            event_count=len(event_list)\n        )\n    else:\n        current = state.get\n        new_state = SessionState(\n            session_id=current.session_id,\n            user_id=user_id,\n            start_time=current.start_time,\n            last_event_time=max(e.event_time for e in event_list),\n            event_count=current.event_count + len(event_list)\n        )\n\n    state.update(new_state)\n    state.setTimeoutTimestamp(\n        int(new_state.last_event_time.timestamp() * 1000) + SESSION_TIMEOUT_MS\n    )\n\nresult = (\n    events_df\n    .groupBy(\"user_id\")\n    .flatMapGroupsWithState(\n        outputMode=\"append\",\n        timeoutConf=GroupStateTimeout.EventTimeTimeout,\n        func=update_session\n    )\n)\n```\n\n**What happens to state that never expires:**\n\nIf a user never stops clicking, or if the watermark never advances past their last event, the state never times out. Over weeks, state accumulates for every active user:\n- StateStore (RocksDB in production) grows unboundedly\n- Disk exhaustion on executors\n- Checkpoint size grows, causing longer recovery times after restart\n\n**Mitigations:**\n1. Absolute session length limit — force close after 4 hours regardless of activity\n```python\nif (new_state.last_event_time - new_state.start_time).total_seconds() > 4 * 3600:\n    yield session_summary(reason=\"max_duration_close\")\n    state.remove()\n    return\n```\n2. Monitor StateStore key count: spark.sql.streaming.stateStore.numKeys metric\n3. Set watermark: events_df.withWatermark('event_time', '2 hours') allows Spark to clean up state for event times older than the watermark"
+  },
+  {
+    "id": "spark-stream-022",
+    "difficulty": "hard",
+    "tags": [
+      "schema-evolution",
+      "operations",
+      "reliability"
+    ],
+    "question": "Your Spark Structured Streaming job has been running 6 months with 6 months of checkpoint state. The upstream Kafka Avro schema is about to gain 3 nullable columns and remove 1 deprecated column. How do you evolve the schema without restarting from scratch?",
+    "answer": "Schema evolution in a running streaming job is one of the most underestimated operational challenges. Restarting from scratch means replaying 6 months of Kafka — if the retention even allows it.\n\n**The core challenge:**\nSpark Structured Streaming checkpoints include the schema of the logical plan. If the schema changes incompatibly, Spark refuses to resume: AnalysisException: Detected schema change between the current query and the last query.\n\n**Strategy 1: Schema-on-read with permissive mode (recommended)**\n\nDefine a schema that is a superset of old and new at startup:\n```python\nnew_schema = StructType([\n    StructField(\"user_id\", StringType(), False),\n    StructField(\"event_time\", TimestampType(), False),\n    # Removed field: not included, old messages just ignore it\n    # New nullable fields:\n    StructField(\"country_code\", StringType(), True),\n    StructField(\"platform\", StringType(), True),\n    StructField(\"session_id\", StringType(), True),\n])\n\ndf = spark.readStream \\\n    .format(\"kafka\") \\\n    .option(\"subscribe\", \"my-topic\") \\\n    .load() \\\n    .select(from_avro(col(\"value\"), schema_string,\n                      options={\"mode\": \"PERMISSIVE\"}).alias(\"data\")) \\\n    .select(\"data.*\")\n```\nWith PERMISSIVE mode, old messages missing the new columns produce nulls. Old messages still containing the deprecated column have it ignored. No restart required.\n\n**Strategy 2: Parallel run during transition (zero-risk)**\n1. Start the new job with the new schema reading from current Kafka offsets\n2. Run both old and new jobs in parallel for 24-48 hours\n3. Validate outputs are equivalent for the overlapping window\n4. Stop the old job\n5. No checkpoint lost, no state rebuilt\n\n**Strategy 3: Checkpoint migration for plan-breaking changes**\nIf the query plan change is truly incompatible:\n1. Stop the streaming job gracefully (process in-flight batch to completion)\n2. Run a one-time batch job to materialize current state to Delta\n3. Start new streaming job with new schema, reading from the Kafka offset where the old job stopped\n```python\nspark.readStream \\\n    .format(\"kafka\") \\\n    .option(\"startingOffsets\", '{\"my-topic\":{\"0\":12345678}}') \\\n    .load()\n```\n\n**Always test in staging first:** replay the last 24h of Kafka data against the new schema before touching production. The AnalysisException will surface in staging, not at 02:00 in production."
+  },
+  {
+    "id": "spark-stream-023",
+    "difficulty": "hard",
+    "tags": [
+      "multi-hop",
+      "architecture",
+      "latency"
+    ],
+    "question": "Design a multi-hop streaming architecture processing 1M events/second through Bronze, Silver, and Gold in real time. What are the ordering guarantees, expected end-to-end latency, and failure modes at each hop?",
+    "answer": "Multi-hop streaming compounds latency and introduces failure modes that single-job architectures do not have.\n\n**Architecture: chained Structured Streaming jobs**\n```\nKafka -> [Job 1: Bronze writer] -> Delta Bronze\n                                        |\n                             [Job 2: Silver job] -> Delta Silver\n                                                          |\n                                             [Job 3: Gold job] -> Delta Gold\n```\n\n**Ordering guarantees:**\n- Within a micro-batch: events processed in Kafka offset order per partition\n- Across hops: Bronze commits before Silver reads, Silver commits before Gold reads. Silver is always at least 1 micro-batch behind Bronze.\n- No global ordering guarantee across partitions: an event from partition 0 may appear in Silver before an event from partition 1 even if they arrived at the same time\n- Watermarks do not propagate automatically between jobs. Each job maintains its own watermark. Late data handled in Bronze may not be correctly handled in Silver if Silver's watermark has advanced further.\n\n**End-to-end latency at 1M events/sec:**\n| Hop | Trigger | Latency added |\n|---|---|---|\n| Kafka to Bronze | 10s micro-batch | 10-15s |\n| Bronze to Silver | 30s trigger | 30-40s |\n| Silver to Gold | 60s trigger | 60-75s |\n| Total | | ~2 minutes |\n\nFor sub-minute E2E latency you need a single-job architecture or DLT with continuous processing mode.\n\n**Failure modes:**\n1. Silver falls behind Bronze: if Silver processing time exceeds its trigger interval, it queues micro-batches. Eventually checkpoint grows and recovery takes longer than the trigger interval — death spiral. Fix: increase trigger interval or add executors.\n2. Gold on incomplete Silver data: Gold triggers at 60s but Silver has not committed yet. Gold reads the previous Silver snapshot — output is based on incomplete data and will not auto-correct unless Gold uses append output mode with time windows.\n3. Cascading failure: Bronze crash stops all downstream progress. Silver retains its read position via checkpoint and catches up when Bronze recovers — but faces a spike proportional to downtime duration.\n4. Schema changes across hops: each job has an independent checkpoint. A schema change must be coordinated across all three jobs simultaneously."
+  },
+  {
+    "id": "spark-stream-024",
+    "difficulty": "hard",
+    "tags": [
+      "monitoring",
+      "observability",
+      "operations"
+    ],
+    "question": "Your Spark Structured Streaming job shows no errors but dashboard data is 3 hours stale. The job is running, offsets are advancing, and there are no exceptions. How do you diagnose this and build monitoring that catches it before users notice?",
+    "answer": "A healthy-looking job producing stale data is the hardest streaming failure mode. No exceptions, no Kafka lag, no OOM — just wrong timestamps in the output.\n\n**Step 1: Check streaming query progress**\n```python\nquery = spark.streams.active[0]\nprint(query.lastProgress)\n# Key fields:\n# numInputRows: 0           <- zero rows processed despite offsets advancing\n# eventTime.watermark: ... <- may be stuck 5h ago\n# eventTime.max: ...       <- last event time seen\n```\n\n**Common root causes for zero input rows:**\n1. Kafka source topic has no new messages — upstream producer is down. Check producer metrics, not just consumer.\n2. Watermark has advanced past available data — if watermark is 5h ago and new data has event_time older than 5h, all rows are silently dropped.\n3. Consumer reading wrong offsets after checkpoint corruption — check failOnDataLoss option.\n\n**Common root causes for rows processed but stale output:**\n4. Output mode is Update and the aggregation window has not closed — with windowed aggregations, results only emit when the watermark advances past the window end. If watermark is stuck, no results.\n5. Delta table read lag — OPTIMIZE or VACUUM is locking the table and readers see a stale snapshot.\n\n**Monitoring system:**\n```python\nfrom pyspark.sql.streaming import StreamingQueryListener\n\nclass FreshnessMonitor(StreamingQueryListener):\n    def onQueryProgress(self, event):\n        p = event.progress\n        if p.numInputRows == 0:\n            alert(\"ZERO_ROWS\", p.timestamp)\n        watermark = p.eventTime.get(\"watermark\")\n        if watermark and is_more_than_30min_old(watermark):\n            alert(\"STALE_WATERMARK\", watermark)\n        if p.batchDuration > expected_trigger_ms * 1.5:\n            alert(\"SLOW_BATCH\", p.batchDuration)\n    def onQueryStarted(self, event): pass\n    def onQueryTerminated(self, event):\n        alert(\"QUERY_TERMINATED\", event.exception)\n\nspark.streams.addListener(FreshnessMonitor())\n```\n\n**Business-level freshness check (separate monitoring job, every 5 minutes):**\n```sql\nSELECT\n    max(event_time) as latest_event,\n    current_timestamp() - max(event_time) as staleness\nFROM gold.user_activity\nWHERE event_date = current_date()\n```\nIf staleness exceeds 30 minutes, page on-call. This catches dashboard staleness regardless of root cause — even if the streaming job itself looks healthy."
+  },
+  {
+    "id": "spark-stream-025",
+    "difficulty": "hard",
+    "tags": [
+      "watermarks",
+      "late-data",
+      "correctness"
+    ],
+    "question": "You have a stream-stream join between orders and payments. Orders arrive up to 2 hours before their payment. Payments arrive up to 1 hour after the order. After 3 hours you must emit the result regardless. Some join results are missing. Walk through the exact watermark math and conditions under which Spark silently drops events.",
+    "answer": "Stream-stream joins with watermarks have a precise state retention contract. Wrong watermark values produce silent data loss — no exceptions, no errors, just missing rows.\n\n**Watermark configuration:**\n```python\norders = orders_raw.withWatermark(\"order_time\", \"4 hours\")\npayments = payments_raw.withWatermark(\"payment_time\", \"3 hours\")\n\njoined = orders.join(\n    payments,\n    expr(\"\"\"\n        orders.order_id = payments.order_id AND\n        payment_time BETWEEN order_time AND order_time + interval 3 hours\n    \"\"\"),\n    joinType=\"leftOuter\"\n)\n```\n\n**The watermark math:**\n\nSpark retains state for rows from each stream until it is certain no future rows can match them.\n\n```\nGlobal watermark = min(\n    max(order_time seen) - 4h,\n    max(payment_time seen) - 3h\n)\n```\n\nAn order row is dropped from state when:\n```\norder_time < global_watermark - max_join_window\norder_time < global_watermark - 3h\n```\n\n**Worked example of silent data loss:**\n- Latest order seen at 10:00 -> orders watermark = 06:00\n- Latest payment seen at 09:30 -> payments watermark = 06:30\n- Global watermark = min(06:00, 06:30) = 06:00\n- An order with order_time = 02:55 is in state\n- State retention check: 02:55 < 06:00 - 3h = 03:00. True -> order is evicted\n- A payment with payment_time = 05:30 arrives and matches this order\n- The order is already gone from state -> join result is silently missing\n\n**How to fix:**\n\n1. Increase watermark delays to cover actual worst-case late arrival. If payments can arrive 1h after orders and orders can be 2h late, the join window is 3h. Watermark delay must be at least 3h on the payment stream.\n\n2. The slower stream controls the global watermark. If payments lag consistently behind orders, the global watermark is dominated by the payment stream. Orders linger in state longer — correct behavior, not a bug.\n\n3. For the 3h emit deadline, use leftOuter join. Rows that exceed the state timeout are emitted with null on the right side.\n\n**Verification:**\n```python\nprint(spark.streams.active[0].lastProgress['eventTime'])\n# {'watermark': '2024-01-15T06:00:00.000Z', 'max': '2024-01-15T10:00:00.000Z'}\n# Watermark 4h behind max event time = correct for 4h watermark delay\n```\n\n**Rule of thumb:** design watermark delays around the actual late arrival distribution of the slower stream, not the faster one. The global watermark trails the minimum of all stream watermarks."
   }
 ]

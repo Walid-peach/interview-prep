@@ -4,139 +4,257 @@
     "question": "How does Terraform track the state of your infrastructure, and why is a remote backend essential for a data engineering team?",
     "answer": "Terraform tracks the mapping between your configuration files and the real-world infrastructure using a **state file** (`terraform.tfstate`). This JSON file contains metadata, resource IDs, and bindings. By default, it's stored locally, which is an anti-pattern for teams.\n\nA **remote backend** (like AWS S3, Google Cloud Storage, or Terraform Cloud) stores the state file centrally. It is essential for teams because it enables **collaboration** (everyone uses the same state) and **security** (state files often contain sensitive variables like database passwords in plaintext, which shouldn't be in Git). Furthermore, remote backends support **state locking** to prevent race conditions when two CI/CD jobs or engineers run `terraform apply` concurrently.\n\n```hcl\nterraform {\n  backend \"s3\" {\n    bucket         = \"my-data-team-tf-state\"\n    key            = \"core-infra/terraform.tfstate\"\n    region         = \"eu-west-1\"\n    dynamodb_table = \"tf-state-locks\"\n    encrypt        = true\n  }\n}\n```\n\n*Follow-up they'll probably ask: What happens if two people run `terraform apply` at the exact same time without a state lock?*",
     "difficulty": "easy",
-    "tags": ["state-management", "backends"]
+    "tags": [
+      "state-management",
+      "backends"
+    ]
   },
   {
     "id": "terraform-002",
     "question": "What is the difference between a Terraform Provider and a Terraform Module?",
     "answer": "A **Provider** is a plugin that Terraform uses to interact with cloud platforms, SaaS providers, and other APIs (e.g., `hashicorp/aws`, `databricks/databricks`). Providers understand API interactions and expose **Resources** and **Data Sources**.\n\nA **Module** is a container for multiple resources that are used together. It is a way to package and reuse Terraform code. For example, you might write an `airflow-deployment` module that bundles an AWS RDS instance, an EKS cluster, and IAM roles into one reusable block. Every Terraform configuration has at least one module, known as the **root module**.\n\n```hcl\n# Provider configuration\nprovider \"aws\" {\n  region = \"eu-west-1\"\n}\n\n# Module usage\nmodule \"data_lake\" {\n  source      = \"./modules/s3_data_lake\"\n  environment = \"prod\"\n}\n```\n\n*Gotcha: Don't hardcode provider configurations inside shared modules, as it makes the module impossible to use across different AWS accounts or regions.*",
     "difficulty": "easy",
-    "tags": ["core-concepts", "architecture"]
+    "tags": [
+      "core-concepts",
+      "architecture"
+    ]
   },
   {
     "id": "terraform-003",
     "question": "Explain the role of `terraform plan` in a CI/CD pipeline. Why not just run `terraform apply -auto-approve` directly?",
     "answer": "The `terraform plan` command reads the current state, compares it to the configuration files, and outputs an **execution plan** detailing exactly what resources will be created, modified, or destroyed. \n\nIn a CI/CD pipeline, skipping the plan phase and running `terraform apply -auto-approve` is extremely dangerous. A minor typo could lead to deleting a production database or dropping an S3 bucket containing raw data. Best practice is to run `terraform plan -out=tfplan` during the Pull Request phase, post the plan output to the PR comments for human review, and then run `terraform apply tfplan` upon merge. By outputting the plan to a file, you guarantee that the exact plan reviewed is what gets applied.\n\n```bash\n# CI step 1: Generate and save plan\nterraform plan -out=tfplan\n\n# CI step 2 (after human approval): Apply exact plan\nterraform apply tfplan\n```\n\n*Gotcha: The `tfplan` file can contain sensitive data in plaintext, so ensure your CI/CD runner securely handles and deletes it after the run.*",
     "difficulty": "easy",
-    "tags": ["cli", "ci-cd"]
+    "tags": [
+      "cli",
+      "ci-cd"
+    ]
   },
   {
     "id": "terraform-004",
     "question": "You need to provide a sensitive database password to a Terraform configuration. How do you securely pass this variable without exposing it in source control?",
     "answer": "You must never hardcode secrets in `.tf` files or commit `.tfvars` files containing secrets. Instead, declare the variable and mark it as `sensitive = true` so Terraform redacts it from console output.\n\nTo pass the value securely in a CI/CD environment, you use **environment variables** prefixed with `TF_VAR_`. For example, a variable named `db_password` can be populated by setting `TF_VAR_db_password`.\n\n```hcl\nvariable \"db_password\" {\n  type      = string\n  sensitive = true\n}\n\nresource \"aws_db_instance\" \"airflow_metadata\" {\n  # ... other config ...\n  password = var.db_password\n}\n```\n\n```bash\nexport TF_VAR_db_password=$(aws secretsmanager get-secret-value ...)\nterraform apply\n```\n\n*Gotcha: Even if marked as sensitive, the secret will still be written in plaintext inside the `terraform.tfstate` file, which is why state file encryption and strict IAM access controls are mandatory.*",
     "difficulty": "easy",
-    "tags": ["security", "variables"]
+    "tags": [
+      "security",
+      "variables"
+    ]
   },
   {
     "id": "terraform-005",
     "question": "Your team is moving to a modular setup for deploying Databricks workspaces. How do you structure environments (e.g., dev, staging, prod) — Terraform Workspaces vs. Separate Directories?",
     "answer": "**Separate Directories** (often paired with tools like Terragrunt) is the industry standard for data infrastructure. You maintain a tree like `environments/dev/main.tf` and `environments/prod/main.tf`, both calling the same underlying modules. This provides strong isolation: a mistake in `dev` cannot accidentally wipe out `prod` state because they use entirely different backend state files.\n\n**Terraform Workspaces** allow you to use the exact same directory and switch states (`terraform workspace select prod`). While useful for spinning up ephemeral developer environments, HashiCorp explicitly advises against using Workspaces for strong separation of permanent environments (like dev/prod) because the backend configuration is shared, making it incredibly easy to run an apply against production by forgetting to switch workspaces.\n\n```text\n# Recommended Structure\n├── modules/\n│   └── databricks_workspace/\n└── environments/\n    ├── dev/\n    │   └── main.tf  # module source = \"../../modules/databricks_workspace\"\n    └── prod/\n        └── main.tf\n```\n\n*Follow-up they'll probably ask: How do you keep the configuration DRY when using separate directories for each environment?*",
     "difficulty": "medium",
-    "tags": ["architecture", "environments"]
+    "tags": [
+      "architecture",
+      "environments"
+    ]
   },
   {
     "id": "terraform-006",
     "question": "You run `terraform plan` and see it wants to destroy and recreate your Airflow metadata RDS instance just because you changed a minor parameter. How do you prevent data loss in these scenarios?",
     "answer": "Terraform destroys and recreates resources when you change an attribute that the provider's API cannot update in place (e.g., changing the engine type or changing certain encryption settings). \n\nTo protect critical data assets, you should use the `lifecycle` meta-argument with `prevent_destroy = true`. If Terraform generates a plan that includes destroying the resource, it will error out before the apply phase. Additionally, you can use `ignore_changes` to stop Terraform from tracking fields managed outside Terraform (like a manually rotated password).\n\n```hcl\nresource \"aws_db_instance\" \"airflow_backend\" {\n  identifier = \"airflow-prod-db\"\n  engine     = \"postgres\"\n  # ...\n\n  lifecycle {\n    prevent_destroy = true\n    ignore_changes  = [\n      password, \n      tags[\"LastBackup\"]\n    ]\n  }\n}\n```\n\n*Gotcha: `prevent_destroy` prevents Terraform from destroying the resource, but it does NOT protect against someone deleting it directly via the AWS Console. You still need AWS SCPs or IAM boundaries for that.*",
     "difficulty": "medium",
-    "tags": ["state-drift", "lifecycle"]
+    "tags": [
+      "state-drift",
+      "lifecycle"
+    ]
   },
   {
     "id": "terraform-007",
     "question": "A developer manually created an S3 bucket in the AWS console for raw data ingestion. Now you need to manage it with Terraform. Walk me through the process.",
     "answer": "To bring existing infrastructure under Terraform's control, you need to map the real-world resource to a resource block in your code and update the state file.\n\nSince Terraform 1.5, the safest and easiest way is using the **`import` block**. You write the `import` block pointing to the resource ID, and run `terraform plan -generate-config-out=generated.tf`. Terraform will generate the HCL code for you and update the state during the apply.\n\n```hcl\n# 1. Add this to your config\nimport {\n  to = aws_s3_bucket.raw_data\n  id = \"manual-raw-ingestion-bucket-xyz\"\n}\n\n# 2. Run the plan to generate code\n# terraform plan -generate-config-out=generated_s3.tf\n\n# 3. Move the generated code to your main.tf and run apply\n```\n\nAlternatively, you use the CLI command `terraform import aws_s3_bucket.raw_data manual-raw-ingestion-bucket-xyz`, but you must manually write the HCL resource block beforehand to match the actual configuration.\n\n*Follow-up they'll probably ask: What happens if your manual HCL block doesn't perfectly match the existing resource when using the CLI import method?*",
     "difficulty": "medium",
-    "tags": ["state-management", "import"]
+    "tags": [
+      "state-management",
+      "import"
+    ]
   },
   {
     "id": "terraform-008",
     "question": "You are building a module to deploy S3 buckets for a Medallion architecture. How do you enforce naming conventions (must start with bronze/silver/gold) via Terraform?",
     "answer": "You can enforce naming conventions by using **Custom Variable Validation**. Inside the `variable` block, you define a `validation` block with a `condition` that evaluates to true or false. If it evaluates to false, Terraform will fail the plan and display the `error_message`.\n\nUsing the `regex` or `can` functions allows for powerful string matching. This ensures bad data is caught at `terraform plan` rather than failing midway through an API call to AWS.\n\n```hcl\nvariable \"layer_name\" {\n  type        = string\n  description = \"The medallion layer name\"\n\n  validation {\n    condition     = can(regex(\"^(bronze|silver|gold)$\", var.layer_name))\n    error_message = \"The layer_name must be exactly 'bronze', 'silver', or 'gold'.\"\n  }\n}\n\nresource \"aws_s3_bucket\" \"medallion\" {\n  bucket = \"mycompany-data-${var.layer_name}-zone\"\n}\n```\n\n*Gotcha: Variable validation rules can only refer to the variable itself. You cannot reference other variables or resources inside the `condition` block.*",
     "difficulty": "medium",
-    "tags": ["modules", "validation"]
+    "tags": [
+      "modules",
+      "validation"
+    ]
   },
   {
     "id": "terraform-009",
     "question": "What is the `moved` block in Terraform, and how does it improve refactoring compared to the old `terraform state mv` command?",
     "answer": "Refactoring Terraform code (e.g., renaming a resource or moving it into a module) changes its logical address. Without intervention, Terraform sees this as \"delete the old resource, create the new one,\" which is disastrous for databases or data lake buckets.\n\nHistorically, engineers ran `terraform state mv <old> <new>` in the CLI to manually fix the state file. This was risky, undocumented in code, and broke CI/CD pipelines. \n\nThe **`moved` block** (introduced in TF 1.1) allows you to declare state moves declaratively in your code. Terraform processes it during the plan phase, updating the state automatically without destroying the resource. It leaves a paper trail for reviewers.\n\n```hcl\n# We moved this bucket inside a module\nmoved {\n  from = aws_s3_bucket.raw_zone\n  to   = module.data_lake.aws_s3_bucket.raw_zone\n}\n```\n\n*Gotcha: You should eventually remove `moved` blocks after they have been applied to all environments (dev, staging, prod) to keep the codebase clean, but removing them too early will cause issues in environments that haven't caught up.*",
     "difficulty": "medium",
-    "tags": ["refactoring", "state-management"]
+    "tags": [
+      "refactoring",
+      "state-management"
+    ]
   },
   {
     "id": "terraform-010",
     "question": "Explain the use of the `data` block (Data Sources). Give an example of when a data engineer would use it instead of creating a resource.",
     "answer": "A **Data Source** (`data` block) allows Terraform to read information about infrastructure that exists outside of the current Terraform configuration. While `resource` blocks *create and manage* infrastructure, `data` blocks *query and fetch* read-only attributes.\n\nA classic use case for a data engineer deploying an Airflow cluster (MWAA) or an EMR cluster is attaching it to an existing Virtual Private Cloud (VPC) managed by the core networking team. Instead of hardcoding subnet IDs, you use a data source to look them up dynamically based on tags.\n\n```hcl\n# Query the networking team's VPC\ndata \"aws_vpc\" \"enterprise_vpc\" {\n  tags = {\n    Environment = \"prod\"\n    Department  = \"core-network\"\n  }\n}\n\n# Query the private subnets within that VPC\ndata \"aws_subnets\" \"private\" {\n  filter {\n    name   = \"vpc-id\"\n    values = [data.aws_vpc.enterprise_vpc.id]\n  }\n  tags = {\n    Tier = \"Private\"\n  }\n}\n\n# Use the fetched IDs\nresource \"aws_mwaa_environment\" \"airflow\" {\n  # ...\n  network_configuration {\n    security_group_ids = [aws_security_group.airflow_sg.id]\n    subnet_ids         = data.aws_subnets.private.ids\n  }\n}\n```\n\n*Follow-up they'll probably ask: What happens to your `terraform plan` if the external resource queried by a data source is deleted?*",
     "difficulty": "medium",
-    "tags": ["core-concepts", "data-sources"]
+    "tags": [
+      "core-concepts",
+      "data-sources"
+    ]
   },
   {
     "id": "terraform-011",
     "question": "How do you manage infrastructure dependencies in Terraform? For example, your Airflow MWAA environment needs its IAM Execution Role to exist before creation.",
     "answer": "Terraform handles dependencies automatically by building a **Directed Acyclic Graph (DAG)**. If Resource B references an attribute of Resource A (e.g., `role_arn = aws_iam_role.airflow_exec.arn`), Terraform infers an **implicit dependency** and ensures A is fully created before B starts.\n\nHowever, sometimes dependencies exist without a direct data reference. For example, you might create an IAM Policy Attachment, and Airflow needs that attachment to exist to start up properly, but Airflow only references the Role ARN, not the attachment. In this case, you use the `depends_on` meta-argument to create an **explicit dependency**.\n\n```hcl\nresource \"aws_iam_role_policy_attachment\" \"airflow_s3\" {\n  role       = aws_iam_role.airflow_exec.name\n  policy_arn = aws_iam_policy.s3_access.arn\n}\n\nresource \"aws_mwaa_environment\" \"airflow\" {\n  name               = \"data-eng-airflow\"\n  execution_role_arn = aws_iam_role.airflow_exec.arn\n  \n  # Explicit dependency to ensure the role has the right permissions \n  # BEFORE Airflow tries to spin up and read its DAG bucket.\n  depends_on = [\n    aws_iam_role_policy_attachment.airflow_s3\n  ]\n}\n```\n\n*Gotcha: Overusing `depends_on` forces sequential execution and drastically slows down your `terraform apply`. Rely on implicit dependencies whenever possible.*",
     "difficulty": "medium",
-    "tags": ["dependencies", "dag"]
+    "tags": [
+      "dependencies",
+      "dag"
+    ]
   },
   {
     "id": "terraform-012",
     "question": "Your Terraform pipeline takes 15 minutes to run because it's querying the state of hundreds of resources. How do you optimize execution time in a large data platform repo?",
     "answer": "Lengthy plan times occur because Terraform refreshes the state of every resource against the cloud provider's API. To fix this, you must **reduce the blast radius**.\n\n1. **State Splitting (Best Practice):** Break the monolithic state into smaller, decoupled states based on lifecycle or domain. For example, `vpc-networking` state, `databricks-clusters` state, and `iam-roles` state. Connect them using `terraform_remote_state` data sources or AWS SSM Parameter Store. \n2. **Targeted Applies (Break-glass):** Use `terraform apply -target=aws_s3_bucket.new_bucket` to only plan/apply specific resources. This bypasses the full state refresh, but is strictly for emergency hotfixes, not daily CI/CD.\n3. **Refresh False (Risky):** Run `terraform plan -refresh=false`. It assumes the state file is perfectly synced with reality. \n\n```bash\n# Emergency hotfix targeting a single resource\nterraform apply -target=\"module.databricks_workspace.databricks_cluster.etl\"\n```\n\n*Follow-up they'll probably ask: What are the risks of splitting state files into too many micro-states?*",
     "difficulty": "medium",
-    "tags": ["performance", "architecture"]
+    "tags": [
+      "performance",
+      "architecture"
+    ]
   },
   {
     "id": "terraform-013",
     "question": "You are deploying an automated ETL pipeline on Databricks via Terraform. How do you provision a cluster that mounts a specific instance profile and passes custom Spark configurations?",
     "answer": "Using the `databricks` Terraform provider, you define a `databricks_cluster` resource. To attach an IAM instance profile (allowing the cluster to read S3 without hardcoded keys), you use the `aws_attributes` block. For performance tuning, you pass key-value pairs into the `spark_conf` block.\n\n```hcl\nresource \"databricks_cluster\" \"daily_etl\" {\n  cluster_name            = \"daily-etl-pipeline\"\n  spark_version           = \"13.3.x-scala2.12\"\n  node_type_id            = \"i3.xlarge\"\n  autotermination_minutes = 30\n  num_workers             = 4\n\n  aws_attributes {\n    instance_profile_arn = aws_iam_instance_profile.databricks_s3.arn\n  }\n\n  spark_conf = {\n    # Optimize Delta Lake writes\n    \"spark.databricks.delta.optimizeWrite.enabled\" = \"true\"\n    # Adjust shuffle partitions for data size\n    \"spark.sql.shuffle.partitions\"                 = \"200\"\n  }\n  \n  custom_tags = {\n    CostCenter = \"DataEngineering\"\n  }\n}\n```\n\n*Gotcha: Modifying certain attributes like `spark_version` or `node_type_id` will force the cluster to restart during `terraform apply`. Plan your deployments so they don't interrupt running Airflow jobs.*",
     "difficulty": "medium",
-    "tags": ["databricks", "spark"]
+    "tags": [
+      "databricks",
+      "spark"
+    ]
   },
   {
     "id": "terraform-014",
     "question": "How do you fetch secrets from AWS Secrets Manager natively within Terraform so you can pass them to an Airflow connection or Databricks secret scope?",
     "answer": "You use the `aws_secretsmanager_secret_version` data source. This allows Terraform to pull the secret payload dynamically during the plan/apply phase. You then parse the JSON payload using Terraform's `jsondecode` function.\n\n```hcl\n# Fetch the secret payload\ndata \"aws_secretsmanager_secret_version\" \"snowflake_creds\" {\n  secret_id = \"prod/data/snowflake_service_user\"\n}\n\n# Create a Databricks secret using the fetched data\nresource \"databricks_secret\" \"snowflake_pass\" {\n  key          = \"snowflake_password\"\n  string_value = jsondecode(data.aws_secretsmanager_secret_version.snowflake_creds.secret_string)[\"password\"]\n  scope        = databricks_secret_scope.etl.name\n}\n```\n\n*Gotcha: Terraform stores data source outputs in the state file. When you pull a secret from Secrets Manager, it is written in **plaintext** to `terraform.tfstate`. Access to the state file bucket must be strictly limited.*",
     "difficulty": "medium",
-    "tags": ["security", "aws"]
+    "tags": [
+      "security",
+      "aws"
+    ]
   },
   {
     "id": "terraform-015",
     "question": "Your team wants to implement a CI/CD pipeline for Terraform using GitHub Actions. What does a robust pipeline look like, and how do you handle the `apply` step safely?",
     "answer": "A robust Terraform CI/CD pipeline separates planning (PR phase) from applying (Merge phase). \n\n1. **On Pull Request:** The pipeline runs `terraform fmt -check`, `terraform validate`, and `terraform plan`. It uses a bot (like `tfsec` or `checkov`) to scan for security flaws. Crucially, it posts the plan output directly into the PR comments so reviewers can see the blast radius.\n2. **On Merge to Main:** The pipeline runs `terraform apply -auto-approve` using the exact plan file generated during the PR phase, ensuring no drift happened between review and merge.\n\nTo handle `apply` safely, rely on **OIDC (OpenID Connect)**. Do not store long-lived AWS IAM User Access Keys in GitHub Secrets. Configure AWS to trust GitHub's OIDC provider so the runner can assume a temporary role.\n\n```yaml\n# Example GitHub Actions OIDC auth step\n- name: Configure AWS Credentials\n  uses: aws-actions/configure-aws-credentials@v4\n  with:\n    role-to-assume: arn:aws:iam::123456789:role/TerraformDeployRole\n    aws-region: eu-west-1\n```\n\n*Follow-up they'll probably ask: How does Atlantis differ from a standard GitHub Actions pipeline for Terraform?*",
     "difficulty": "medium",
-    "tags": ["ci-cd", "automation"]
+    "tags": [
+      "ci-cd",
+      "automation"
+    ]
   },
   {
     "id": "terraform-016",
     "question": "What is the difference between `count` and `for_each` when deploying multiple identical resources, and why is `for_each` preferred for data pipelines?",
     "answer": "`count` creates multiple resources based on an integer. It generates a list of resources indexed by numbers (e.g., `aws_s3_bucket.bucket[0]`, `[1]`). \n\n`for_each` creates multiple resources based on a map or a set of strings. It generates a map of resources indexed by keys (e.g., `aws_s3_bucket.bucket[\"client_a\"]`).\n\nFor data engineering, `for_each` is vastly superior. If you use `count` to create 5 client buckets, and you remove client #2 from the middle of the list, the indexes shift. Terraform will destroy and recreate buckets 3, 4, and 5 to match the new index order, leading to catastrophic data loss. `for_each` ties the resource to an immutable string key, so deleting \"client_b\" only destroys that specific bucket.\n\n```hcl\nvariable \"clients\" {\n  type    = set(string)\n  default = [\"acme\", \"stark\", \"wayne\"]\n}\n\nresource \"aws_s3_bucket\" \"client_data\" {\n  for_each = var.clients\n  bucket   = \"raw-data-${each.key}\"\n}\n```\n\n*Gotcha: `for_each` keys must be known at the `plan` stage. You cannot use `for_each` on a list generated by a resource being created in the same apply step.*",
     "difficulty": "medium",
-    "tags": ["architecture", "loops"]
+    "tags": [
+      "architecture",
+      "loops"
+    ]
   },
   {
     "id": "terraform-017",
     "question": "A junior engineer accidentally deleted the remote state file from S3, and the DynamoDB lock is stuck. The physical infrastructure in AWS is still running fine. Walk me through your disaster recovery steps.",
     "answer": "State loss is a major emergency, but because the real infrastructure is running, we just need to reconstruct the map.\n\n1. **Unlock the State:** The DynamoDB lock is stuck because the process was interrupted. Force unlock it via CLI: `terraform force-unlock <LOCK_ID>`. \n2. **Recover from S3 Versioning (Ideal):** State buckets should *always* have S3 Object Versioning enabled. Go to the AWS console, find the deleted `terraform.tfstate`, and restore the previous version. Run `terraform plan` to verify sync.\n3. **Rebuild via Import (Worst Case):** If versioning was off, the state is gone. Create a fresh workspace. You must write `import` blocks (or use `terraform import` CLI) for *every single resource* defined in your `.tf` files, mapping them to their AWS ARNs. \n\n```bash\n# Force unlock the stuck lock\nterraform force-unlock 8e4f1... \n\n# Fallback CLI import process if versioning failed\nterraform import module.network.aws_vpc.main vpc-0a1b2c3d\n```\n\n*Gotcha: Do not run `terraform apply` until the state is fully recovered and `terraform plan` shows exactly zero changes to infrastructure.*",
     "difficulty": "hard",
-    "tags": ["disaster-recovery", "state-management"]
+    "tags": [
+      "disaster-recovery",
+      "state-management"
+    ]
   },
   {
     "id": "terraform-018",
     "question": "You manage a Databricks Unity Catalog setup via Terraform. Your `terraform plan` shows thousands of changes because data scientists are manually granting table access via SQL (`GRANT SELECT ON...`). How do you resolve this state drift?",
     "answer": "This is a classic battle between Infrastructure as Code and Data Control. Unity Catalog grants can be highly dynamic, and enforcing them strictly via Terraform can cause massive friction.\n\nYou have two architectural choices:\n\n1. **Ignore the Drift:** Tell Terraform to stop tracking grants on specific objects using the `lifecycle { ignore_changes = [grants] }` block. This cedes access control to Databricks SQL or the UI, which is often preferred for dynamic data teams.\n2. **Strict Enforcement (Revert Drift):** If compliance mandates that all grants live in git, run `terraform apply`. Terraform will revoke all manual SQL grants and reset reality to match your code. \n\nIf you choose strict enforcement, you should abstract grants into a dynamic configuration (e.g., reading a YAML matrix of roles) and lock down the `GRANT` command in Databricks so scientists must open a PR to get access.\n\n```hcl\nresource \"databricks_grants\" \"silver_schema\" {\n  schema = databricks_schema.silver.id\n\n  grant {\n    principal  = \"data_scientists\"\n    privileges = [\"SELECT\", \"READ_VOLUME\"]\n  }\n}\n```\n\n*Follow-up they'll probably ask: How do you manage the Terraform state when managing millions of individual table-level grants? (Answer: Don't. Manage grants at the Catalog or Schema level).*",
     "difficulty": "hard",
-    "tags": ["databricks", "unity-catalog", "state-drift"]
+    "tags": [
+      "databricks",
+      "unity-catalog",
+      "state-drift"
+    ]
   },
   {
     "id": "terraform-019",
     "question": "We must deploy identical data pipelines (S3, IAM, Glue) for 50 clients. How do you design the Terraform codebase to be highly reusable, DRY, and easy to update across all 50 clients simultaneously?",
     "answer": "To achieve a DRY architecture at scale, you encapsulate the entire pipeline (S3, IAM, Glue) into a single, cohesive **Terraform Module**. \n\nInstead of copy-pasting the module invocation 50 times, you define a map of clients in a `tfvars` file or a local YAML configuration. Then, you use `for_each` on the module invocation itself. When a new client is onboarded, you simply add their name to the map—no HCL changes required. If you need to upgrade the pipeline (e.g., adding a new Glue worker type), you update the underlying module once, and the next `apply` rolls it out to all 50 clients.\n\n```hcl\n# In environments/prod/main.tf\nlocals {\n  clients = {\n    \"alpha\" = { retention_days = 30, glue_workers = 10 }\n    \"beta\"  = { retention_days = 90, glue_workers = 2 }\n  }\n}\n\nmodule \"client_pipeline\" {\n  source   = \"../../modules/client_data_pipeline\"\n  for_each = local.clients\n\n  client_name    = each.key\n  retention_days = each.value.retention_days\n  glue_workers   = each.value.glue_workers\n}\n```\n\n*Gotcha: If the blast radius is too large (updating one module risks breaking 50 clients at once), you should pin the module version using Git tags and update clients gradually.*",
     "difficulty": "hard",
-    "tags": ["architecture", "modules", "dry"]
+    "tags": [
+      "architecture",
+      "modules",
+      "dry"
+    ]
   },
   {
     "id": "terraform-020",
     "question": "In a multi-account AWS strategy (e.g., separate accounts for Dev, QA, Prod data platforms), how do you configure Terraform to deploy resources across accounts from a single CI/CD pipeline using least privilege?",
     "answer": "A secure multi-account strategy uses **IAM Assume Role**. The CI/CD runner (e.g., GitHub Actions) operates in a central \"Tools\" or \"Identity\" AWS account. It is granted a baseline role that has exactly one permission: `sts:AssumeRole` into target accounts.\n\nIn your Terraform code, you define multiple AWS Providers, mapping each to a target account using the `assume_role` block. You use provider aliases to pass the correct provider to your modules.\n\n```hcl\n# Default provider in the Tools account\nprovider \"aws\" {\n  region = \"eu-west-1\"\n}\n\n# Aliased provider targeting the Prod Data account\nprovider \"aws\" {\n  alias  = \"prod_data\"\n  region = \"eu-west-1\"\n  assume_role {\n    role_arn = \"arn:aws:iam::999999999999:role/TerraformCrossAccountRole\"\n  }\n}\n\nmodule \"prod_redshift\" {\n  source = \"./modules/redshift\"\n  providers = {\n    aws = aws.prod_data\n  }\n}\n```\n\n*Gotcha: Ensure the `TerraformCrossAccountRole` in the target account has a strict Trust Policy that only allows the specific CI/CD runner's IAM role to assume it, preventing privilege escalation.*",
     "difficulty": "hard",
-    "tags": ["aws", "multi-account", "security"]
+    "tags": [
+      "aws",
+      "multi-account",
+      "security"
+    ]
+  },
+  {
+    "id": "terraform-021",
+    "difficulty": "hard",
+    "tags": [
+      "oidc",
+      "security",
+      "ci-cd"
+    ],
+    "question": "Your team uses long-lived AWS Access Keys in GitHub Actions for Terraform deployments. Security has flagged this as critical. Migrate to OIDC-based short-lived credentials with zero downtime to existing pipelines.",
+    "answer": "OIDC eliminates static credentials by federating GitHub Actions as an identity provider to AWS. The migration can be done without any CI/CD downtime.\n\n**Step 1: Create the OIDC Identity Provider in AWS**\n```hcl\nresource \"aws_iam_openid_connect_provider\" \"github\" {\n  url             = \"https://token.actions.githubusercontent.com\"\n  client_id_list  = [\"sts.amazonaws.com\"]\n  thumbprint_list = [\"6938fd4d98bab03faadb97b34396831e3780aea1\"]\n}\n```\n\n**Step 2: IAM Role that GitHub Actions can assume**\n```hcl\ndata \"aws_iam_policy_document\" \"github_oidc_assume\" {\n  statement {\n    effect  = \"Allow\"\n    actions = [\"sts:AssumeRoleWithWebIdentity\"]\n    principals {\n      type        = \"Federated\"\n      identifiers = [aws_iam_openid_connect_provider.github.arn]\n    }\n    condition {\n      test     = \"StringEquals\"\n      variable = \"token.actions.githubusercontent.com:aud\"\n      values   = [\"sts.amazonaws.com\"]\n    }\n    condition {\n      test     = \"StringLike\"\n      variable = \"token.actions.githubusercontent.com:sub\"\n      values   = [\"repo:my-org/data-platform:ref:refs/heads/main\"]\n    }\n  }\n}\n\nresource \"aws_iam_role\" \"github_actions_terraform\" {\n  name                 = \"github-actions-terraform\"\n  assume_role_policy   = data.aws_iam_policy_document.github_oidc_assume.json\n  max_session_duration = 3600\n}\n```\n\n**Step 3: Update GitHub Actions workflow**\n```yaml\njobs:\n  deploy:\n    permissions:\n      id-token: write  # required for OIDC token generation\n      contents: read\n    steps:\n      - uses: aws-actions/configure-aws-credentials@v4\n        with:\n          role-to-assume: arn:aws:iam::123456789012:role/github-actions-terraform\n          role-session-name: GitHubActions-${{ github.run_id }}\n          aws-region: eu-west-1\n      - run: terraform apply -auto-approve\n```\n\n**Zero-downtime migration:**\n1. Set up OIDC provider and IAM role using the existing static keys (meta but safe)\n2. Update one non-critical pipeline to use OIDC and verify it works\n3. Roll out to all pipelines over 1-2 sprints\n4. After all pipelines migrated, revoke the static access keys\n5. Delete the GitHub secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY\n\n**Environment-based scope restriction:**\n```hcl\n# Prod role: only assumable from main branch\nvalues = [\"repo:my-org/data-platform:ref:refs/heads/main\"]\n\n# Dev role: any branch\nvalues = [\"repo:my-org/data-platform:ref:refs/heads/*\"]\n```"
+  },
+  {
+    "id": "terraform-022",
+    "difficulty": "hard",
+    "tags": [
+      "import",
+      "migration",
+      "state"
+    ],
+    "question": "You have 200 AWS resources running in production that were created manually. Bring them under Terraform management without destroying and recreating any of them. Walk through the safe strategy at scale.",
+    "answer": "Importing 200 resources is a migration project. The risks are: import overwrites wrong state, plan shows destructive changes, or partial import leaves the environment in an inconsistent managed/unmanaged mix.\n\n**Modern approach: Terraform import blocks (Terraform 1.5+)**\n\nImport blocks are declarative, version-controlled, and generate config automatically.\n\n```hcl\nimport {\n  id = \"my-data-lake-bucket\"\n  to = aws_s3_bucket.data_lake\n}\n\nimport {\n  id = \"arn:aws:iam::123456789012:role/AirflowExecutionRole\"\n  to = aws_iam_role.airflow_execution\n}\n```\n\n```bash\n# Generate resource configuration from existing AWS state\nterraform plan -generate-config-out=generated.tf\n\n# Review generated.tf, remove computed attributes, then:\nterraform plan\n# GOAL: zero changes. If you see changes, investigate before applying.\n```\n\n**Safe migration strategy for 200 resources:**\n\n**Phase 1: Audit — list all resources**\n```bash\naws resourcegroupstaggingapi get-resources \\\n  --tag-filters Key=Environment,Values=production \\\n  --output json | jq '.ResourceTagMappingList[].ResourceARN'\n```\n\n**Phase 2: Import in dependency order**\nFoundation resources first (VPC, IAM, KMS), then resources that depend on them (S3 with KMS, EC2 in VPC). Importing in the wrong order causes false drift.\n\n**Phase 3: One resource type at a time**\n```bash\n# Import all S3 buckets, verify zero plan changes, then move to IAM, then Glue, etc.\nterraform plan -target=aws_s3_bucket.data_lake\n```\n\n**Phase 4: Detect dangerous drift**\n```bash\n# After import, check for replacements — these are dangerous\nterraform plan 2>&1 | grep -E '(destroy|forces replacement)'\n# A forces-replacement diff means the config does not match reality\n# Do NOT apply — update the .tf file to match current state instead\n```\n\n**Phase 5: State backup before every import batch**\n```bash\naws s3 cp s3://my-tfstate/terraform.tfstate \\\n  s3://my-tfstate/backups/terraform.tfstate.$(date +%Y%m%d%H%M%S)\n```\n\n**Most common failure:** after import, terraform plan shows a diff because the generated config includes a computed attribute (like bucket_region) that Terraform expects to set. Remove computed attributes from the config — Terraform tracks them in state automatically."
+  },
+  {
+    "id": "terraform-023",
+    "difficulty": "hard",
+    "tags": [
+      "testing",
+      "quality",
+      "reliability"
+    ],
+    "question": "Your team ships Terraform changes that break production 2-3 times per quarter. Changes pass terraform plan in dev but cause issues in prod. Design a testing pyramid for Terraform that catches these failures before they reach prod.",
+    "answer": "A Terraform testing pyramid mirrors the software testing pyramid: fast cheap tests at the bottom, slow expensive tests at the top.\n\n**Level 1: Static analysis (under 30 seconds, every commit)**\n```bash\nterraform fmt -check -recursive\nterraform validate\ntfsec . --minimum-severity HIGH\ntflint --recursive\n```\n\n**Level 2: Preconditions and postconditions in modules (caught at plan time)**\n```hcl\nresource \"aws_s3_bucket_versioning\" \"data_lake\" {\n  bucket = aws_s3_bucket.data_lake.id\n  versioning_configuration { status = \"Enabled\" }\n\n  lifecycle {\n    precondition {\n      condition     = var.environment == \"prod\" ? var.enable_versioning == true : true\n      error_message = \"Versioning must be enabled in production.\"\n    }\n  }\n}\n\ncheck \"bucket_encryption\" {\n  assert {\n    condition     = aws_s3_bucket_server_side_encryption_configuration.this != null\n    error_message = \"S3 bucket must have SSE enabled.\"\n  }\n}\n```\n\n**Level 3: Terraform native tests (Terraform 1.6+)**\n```hcl\n# tests/s3_bucket.tftest.hcl\nvariables {\n  bucket_name = \"test-bucket-abc123\"\n  environment = \"test\"\n}\n\nrun \"creates_bucket_with_encryption\" {\n  command = apply\n  assert {\n    condition     = aws_s3_bucket_server_side_encryption_configuration.this != null\n    error_message = \"Bucket must have SSE enabled\"\n  }\n  assert {\n    condition     = aws_s3_bucket_versioning.this.versioning_configuration[0].status == \"Enabled\"\n    error_message = \"Versioning must be enabled\"\n  }\n}\n\nrun \"cleanup\" { command = destroy }\n```\n\n**Level 4: Integration tests with Terratest (real AWS, ~15 minutes)**\n```go\nfunc TestS3BucketModule(t *testing.T) {\n    opts := &terraform.Options{\n        TerraformDir: \"../modules/s3-data-lake\",\n        Vars: map[string]interface{}{\n            \"bucket_name\": fmt.Sprintf(\"test-bucket-%s\", random.UniqueId()),\n        },\n    }\n    defer terraform.Destroy(t, opts)\n    terraform.InitAndApply(t, opts)\n\n    bucketName := terraform.Output(t, opts, \"bucket_name\")\n    encryption, _ := s3Client.GetBucketEncryption(&s3.GetBucketEncryptionInput{\n        Bucket: aws.String(bucketName),\n    })\n    assert.NotNil(t, encryption.ServerSideEncryptionConfiguration)\n}\n```\n\n**Why dev passes but prod breaks (the root cause):**\n1. Different provider versions between dev and prod — enforce required_providers with exact version pins\n2. Dev workspace has different existing state — variables that differ between environments change resource behavior\n3. Cross-resource dependencies exist in prod (VPC, IAM, KMS) that do not exist in dev\n\nFix: use workspace-per-environment with the same variable structure, and lock provider versions."
+  },
+  {
+    "id": "terraform-024",
+    "difficulty": "hard",
+    "tags": [
+      "modules",
+      "architecture",
+      "scalability"
+    ],
+    "question": "You need to provision identical data platform infrastructure (VPC, EKS, S3, Glue, Airflow) for 80 clients, each with slight variations in region, retention, and team size. Design the Terraform module architecture that minimizes duplication and maximizes safety.",
+    "answer": "80 clients with varying configs is a module composition problem. The wrong answer is 80 copies of the same configuration.\n\n**Module architecture:**\n```\nterraform/\n├── modules/\n│   ├── networking/        # VPC, subnets, security groups\n│   ├── compute/           # EKS cluster, node groups\n│   ├── storage/           # S3 data lake, Glue catalog\n│   ├── orchestration/     # Airflow via Helm\n│   └── data-platform/     # composite: calls all above modules\n├── clients/\n│   ├── client-a/\n│   │   ├── main.tf        # calls data-platform module\n│   │   └── terraform.tfvars\n│   └── client-b/ ...\n└── environments/\n    ├── dev.tfvars\n    └── prod.tfvars\n```\n\n**The composite module interface:**\n```hcl\n# modules/data-platform/variables.tf\nvariable \"client_id\"                { type = string }\nvariable \"region\"                   { type = string }\nvariable \"eks_node_count\"           { type = number; default = 3 }\nvariable \"s3_retention_days\"        { type = number; default = 365 }\nvariable \"enable_deletion_protection\" { type = bool; default = true }\n```\n\n**Client config — only values, no Terraform code:**\n```hcl\n# clients/client-a/terraform.tfvars\nclient_id             = \"client-a\"\nregion                = \"eu-west-1\"\neks_node_count        = 10\ns3_retention_days     = 730\nenable_deletion_protection = true\n```\n\n**Managing 80 Terraform states — use Terragrunt:**\n```hcl\n# root terragrunt.hcl\nremote_state {\n  backend = \"s3\"\n  config = {\n    bucket = \"my-org-tfstate\"\n    key    = \"${path_relative_to_include()}/terraform.tfstate\"\n    dynamodb_table = \"terraform-locks\"\n  }\n}\n\n# clients/client-a/terragrunt.hcl\ninclude \"root\" { path = find_in_parent_folders() }\nterraform { source = \"../../modules//data-platform\" }\ninputs = { client_id = \"client-a\", region = \"eu-west-1\" }\n```\n\n```bash\n# Apply to all clients in parallel (with limit)\nterragrunt run-all apply --terragrunt-parallelism 10\n\n# Apply to one client\ncd clients/client-a && terragrunt apply\n```\n\n**Safety mechanisms:**\n1. prevent_destroy on all critical resources — terraform destroy on wrong directory fails safely\n2. Per-client CI pipeline — a broken change cannot affect all 80 clients in one apply\n3. Canary deployment — apply to 1-2 pilot clients first, gate rollout\n4. Module version pinning:\n```hcl\nsource = \"git::https://github.com/my-org/terraform-modules.git//data-platform?ref=v2.1.0\"\n```\nClients pin to a module version. Breaking changes do not affect them until they explicitly upgrade."
+  },
+  {
+    "id": "terraform-025",
+    "difficulty": "hard",
+    "tags": [
+      "drift",
+      "operations",
+      "governance"
+    ],
+    "question": "Your Terraform-managed data platform has 47 unexpected changes after engineers made hotfixes directly in the AWS console during incidents. Some would destroy production resources. How do you resolve this systematically without downtime?",
+    "answer": "47 unexpected changes in production is a governance failure, not a Terraform failure. Resolving it requires triage before any apply.\n\n**Step 1: Classify every change before touching anything**\n```bash\nterraform plan -out=plan.binary\nterraform show -json plan.binary > plan.json\n\npython3 -c \"\nimport json\nwith open('plan.json') as f:\n    plan = json.load(f)\nfor change in plan['resource_changes']:\n    print(change['change']['actions'], change['type'], change['address'])\n\"\n```\n\nSort into:\n- no-op: safe to ignore\n- update: in-place change, review individually\n- delete+create: DANGER — this recreates the resource\n- delete: DANGER — pure deletion\n\n**Step 2: For each update — decide: apply or update the config?**\n```bash\n# Review the specific diff\nterraform plan -target=aws_s3_bucket.data_lake_prod\n\n# Option A: The console change was the CORRECT fix\n#   -> Update the .tf file to match current state, plan shows no-op, no apply needed\n\n# Option B: The Terraform config is CORRECT\n#   -> Apply this specific target to revert the drift\nterraform apply -target=aws_s3_bucket.data_lake_prod\n```\n\n**Step 3: For delete+create — STOP**\n```bash\nterraform plan -target=aws_rds_instance.prod_db 2>&1 | grep 'forces replacement'\n# forces replacement: db_name changed from old_name to new_name\n```\nA hotfix changed an immutable attribute. Options:\n1. Update the .tf config to match the console state (no recreation)\n2. Schedule a maintenance window for controlled recreation\n\nNever run terraform apply on resources showing delete+create in production without a maintenance window.\n\n**Step 4: Prevent future drift**\n```yaml\n# Scheduled drift detection in CI\nschedule:\n  - cron: '0 */4 * * *'\njobs:\n  detect-drift:\n    steps:\n      - run: terraform plan -detailed-exitcode\n        # Exit code 2 = changes detected\n      - if: failure()\n        run: curl -X POST $SLACK_WEBHOOK -d '{\"text\": \"Terraform drift detected in prod\"}'\n```\n\n**Governance going forward:**\n- Use AWS Service Control Policies to block console changes on production resources tagged as terraform-managed\n- All hotfixes must be followed by a Terraform PR within 24 hours documenting the change\n- Weekly drift detection run with required sign-off from platform lead before any non-emergency apply"
   }
 ]

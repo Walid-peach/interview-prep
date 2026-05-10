@@ -50,6 +50,11 @@
     "icon": "🏗️"
   },
   {
+    "id": "personal",
+    "name": "Personal",
+    "icon": "👤"
+  },
+  {
     "id": "databricks",
     "name": "Databricks",
     "icon": "🧱"
