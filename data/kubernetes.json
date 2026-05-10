@@ -4,139 +4,264 @@
     "question": "What is the difference between a Kubernetes Pod and a Node?",
     "answer": "A **Node** is the physical or virtual machine (e.g., an AWS EC2 instance or on-prem server) that forms the foundation of the Kubernetes cluster. It provides the actual CPU, memory, and disk resources.\n\nA **Pod** is the smallest deployable unit in Kubernetes. It represents a single instance of a running process in your cluster. A Pod typically contains one Docker container, but it can contain multiple tightly coupled containers (like a main application and a logging sidecar) that share the same network namespace, IP address, and storage volumes. Nodes host multiple Pods.\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: my-spark-driver\nspec:\n  containers:\n  - name: spark\n    image: bitnami/spark:3.4\n```\n\n*Gotcha: You never SSH into a Pod to fix it. Pods are entirely ephemeral. If a Pod dies, it is not resurrected; the controlling ReplicaSet creates a brand new Pod with a new IP address to replace it.*",
     "difficulty": "easy",
-    "tags": ["core-concepts", "architecture"]
+    "tags": [
+      "core-concepts",
+      "architecture"
+    ]
   },
   {
     "id": "kubernetes-002",
     "question": "When would you use a Deployment vs a StatefulSet for data infrastructure components?",
     "answer": "A **Deployment** is designed for stateless applications (like an Airflow Webserver or an API backend). All Pods created by a Deployment are identical and interchangeable. If one dies, another spins up. Storage attached to them is usually ephemeral or shared loosely.\n\nA **StatefulSet** is designed for stateful applications (like a Kafka Broker, ZooKeeper, or a database). StatefulSets guarantee the **ordering and uniqueness** of Pods. Each Pod gets a sticky, persistent identity (e.g., `kafka-0`, `kafka-1`). If `kafka-0` crashes, the replacement Pod will also be named `kafka-0` and will reattach to the exact same Persistent Volume previously used by `kafka-0`.\n\n*Follow-up they'll probably ask: Can you scale down a StatefulSet safely without data loss? (Answer: Yes, but you must manually drain/rebalance the data from the node being removed before scaling down).* ",
     "difficulty": "easy",
-    "tags": ["workloads", "state"]
+    "tags": [
+      "workloads",
+      "state"
+    ]
   },
   {
     "id": "kubernetes-003",
     "question": "Explain Persistent Volumes (PV) and Persistent Volume Claims (PVC).",
     "answer": "A **Persistent Volume (PV)** is a piece of storage in the cluster provisioned by an administrator or dynamically via a Storage Class (like an AWS EBS volume or NFS share). It exists independently of any individual Pod.\n\nA **Persistent Volume Claim (PVC)** is a request for storage by a user/Pod. It specifies the size and access mode (e.g., ReadWriteOnce, ReadWriteMany). Kubernetes binds the PVC to an appropriate PV.\n\nWhen deploying Airflow on Kubernetes, you might use a PVC to persist the PostgreSQL metadata database so it survives Pod restarts.\n\n```yaml\nkind: PersistentVolumeClaim\napiVersion: v1\nmetadata:\n  name: airflow-db-pvc\nspec:\n  accessModes:\n    - ReadWriteOnce\n  resources:\n    requests:\n      storage: 10Gi\n```\n\n*Gotcha: If you delete a Deployment, its associated PVCs and PVs are NOT automatically deleted, meaning you continue to pay AWS for the underlying EBS volumes.*",
     "difficulty": "easy",
-    "tags": ["storage", "volumes"]
+    "tags": [
+      "storage",
+      "volumes"
+    ]
   },
   {
     "id": "kubernetes-004",
     "question": "What is the difference between a Kubernetes Service and an Ingress?",
     "answer": "A **Service** provides internal networking. Because Pod IPs change constantly, a Service provides a stable internal IP address and DNS name (e.g., `airflow-webserver.default.svc.cluster.local`) that load-balances traffic to a group of Pods based on label selectors. It is strictly for communication *inside* the cluster (unless configured as a LoadBalancer/NodePort).\n\nAn **Ingress** manages external access to the Services in a cluster, typically HTTP/HTTPS. It acts as an L7 reverse proxy (like NGINX). It provides name-based virtual hosting, SSL termination, and URI routing. You use an Ingress to route external traffic from `airflow.mycompany.com` to the internal Airflow Service.\n\n*Follow-up they'll probably ask: How do you secure an Ingress to only allow employees to access the Airflow UI?*",
     "difficulty": "easy",
-    "tags": ["networking", "ingress"]
+    "tags": [
+      "networking",
+      "ingress"
+    ]
   },
   {
     "id": "kubernetes-005",
     "question": "Explain Kubernetes Resource Requests vs Limits. What happens if a Spark executor exceeds them?",
     "answer": "**Requests** are what a Pod is guaranteed to get. The Kubernetes scheduler uses requests to find a Node with enough available capacity to host the Pod. If no Node has enough capacity, the Pod remains in `Pending` state.\n\n**Limits** are the absolute maximum resources a Pod is allowed to consume. \n\nIf a Spark executor exceeds its **CPU limit**, the container is not killed; it is heavily **throttled** by the Linux kernel (CFS quota), causing the Spark job to slow to a crawl without crashing. \n\nIf the executor exceeds its **Memory limit**, the Linux kernel immediately issues an **OOMKilled** (Out Of Memory) signal, instantly terminating the container. Spark will lose the executor and have to retry the lost tasks on another node.\n\n```yaml\nresources:\n  requests:\n    memory: \"4Gi\"\n    cpu: \"1000m\"\n  limits:\n    memory: \"8Gi\"\n    cpu: \"2000m\"\n```\n\n*Gotcha: Setting limits significantly higher than requests (overcommitting) can lead to node-level memory pressure, causing the Kubelet to evict random Pods to save the Node.*",
     "difficulty": "medium",
-    "tags": ["compute", "resources", "oom"]
+    "tags": [
+      "compute",
+      "resources",
+      "oom"
+    ]
   },
   {
     "id": "kubernetes-006",
     "question": "What are the two primary ways to deploy and run Apache Spark natively on Kubernetes? Which is better for production?",
     "answer": "1. **`spark-submit` natively**: Since Spark 2.3, you can pass `--master k8s://https://<api-server>` to `spark-submit`. Spark talks directly to the Kubernetes API to spin up the Driver pod, which in turn requests Executor pods. It is native but requires complex shell scripting to manage job lifecycles and retries.\n\n2. **Spark Kubernetes Operator (Google / Kubeflow)**: This is the industry standard for production. It uses Custom Resource Definitions (CRDs). You define your Spark job declaratively in a YAML file (`kind: SparkApplication`). The Operator running in the cluster handles submitting it, managing retries, exposing metrics, and cleaning up resources.\n\n```yaml\napiVersion: \"sparkoperator.k8s.io/v1beta2\"\nkind: SparkApplication\nmetadata:\n  name: daily-etl-job\nspec:\n  type: Python\n  mainApplicationFile: \"s3a://bucket/scripts/job.py\"\n```\n\n*Follow-up they'll probably ask: How does the Spark Operator clean up executor pods after a job successfully finishes?*",
     "difficulty": "medium",
-    "tags": ["spark", "architecture", "operator"]
+    "tags": [
+      "spark",
+      "architecture",
+      "operator"
+    ]
   },
   {
     "id": "kubernetes-007",
     "question": "We have specific high-memory Nodes (e.g., AWS r5.4xlarge) dedicated to Spark jobs, and general-purpose Nodes for Airflow. How do you ensure Spark Pods ONLY run on the high-memory nodes, and Airflow Pods NEVER run on them?",
     "answer": "You use a combination of **Taints/Tolerations** and **Node Affinity**.\n\n1. **Taints**: You apply a Taint to the high-memory nodes: `kubectl taint nodes node1 spark-only=true:NoSchedule`. This repels all normal Pods (like Airflow) from scheduling on it.\n2. **Tolerations**: You configure your Spark Application pods with a Toleration matching the taint. This allows them to bypass the repulsion.\n3. **Node Affinity / Node Selector**: Tolerations only *allow* Spark to run there; they don't *force* it. To force Spark onto those specific nodes, you must also add a `nodeSelector` or `nodeAffinity` targeting a specific label on those nodes (e.g., `instance-type: r5.4xlarge`).\n\n```yaml\n# Inside the SparkApplication spec\ntolerations:\n  - key: \"spark-only\"\n    operator: \"Equal\"\n    value: \"true\"\n    effect: \"NoSchedule\"\nnodeSelector:\n  instance-type: \"r5.4xlarge\"\n```\n\n*Gotcha: If you forget the `nodeSelector`, your Spark jobs might tolerate the heavy nodes but randomly schedule onto the weak Airflow nodes instead.*",
     "difficulty": "medium",
-    "tags": ["scheduling", "compute"]
+    "tags": [
+      "scheduling",
+      "compute"
+    ]
   },
   {
     "id": "kubernetes-008",
     "question": "Explain the 'Sidecar' pattern in Kubernetes. Give a concrete example of how you would use it for an Apache Airflow deployment.",
     "answer": "The **Sidecar Pattern** involves running a secondary, helper container alongside the main application container within the exact same Pod. Because they share the same Pod, they share the same ephemeral disk volumes (`emptyDir`).\n\nA classic use case in Airflow is the **Git-Sync Sidecar**. \n\nAirflow Scheduler and Webserver pods need access to the latest DAG Python files. Instead of baking the DAGs into the Docker image (which requires a full image rebuild on every code change), you deploy a sidecar container running `k8s-git-sync`. The sidecar polls your GitHub repo every 30 seconds and pulls the latest DAGs into a shared `emptyDir` volume. The main Airflow container reads from that exact same volume, executing the fresh code seamlessly without restarting the pod.\n\n*Follow-up they'll probably ask: What happens if the git-sync sidecar crashes? Does the Airflow container crash too? (Answer: No, the Airflow container keeps running using the last synced files while the sidecar restarts).* ",
     "difficulty": "medium",
-    "tags": ["patterns", "airflow"]
+    "tags": [
+      "patterns",
+      "airflow"
+    ]
   },
   {
     "id": "kubernetes-009",
     "question": "You need to provide a database password to your PySpark application running in K8s. What is the difference between injecting a Secret as an Environment Variable versus mounting it as a Volume?",
     "answer": "**Environment Variables:** You map a key from a Kubernetes `Secret` directly to an env var (`DB_PASSWORD`). It is easy to access in Python (`os.environ['DB_PASSWORD']`). However, if the Secret is updated in Kubernetes, the Pod will NOT see the new value until the Pod is completely restarted.\n\n**Volume Mounts:** You mount the `Secret` as a file (e.g., `/etc/secrets/db_password.txt`). The application reads the file content. The massive advantage is that when the Secret object is updated in Kubernetes, the mounted file is automatically updated dynamically within the running Pod. \n\nFor short-lived batch Spark jobs, Environment Variables are perfectly fine. For long-running Spark Structured Streaming jobs or Airflow webservers, Volume Mounts are safer if credential rotation is enforced.\n\n```yaml\n# Env Var injection\nenv:\n  - name: DB_PASSWORD\n    valueFrom:\n      secretKeyRef:\n        name: my-db-secret\n        key: password\n```\n\n*Gotcha: Spark UI often exposes environment variables in plain text on the 'Environment' tab. Ensure `spark.redaction.regex` is configured properly to hide passwords.*",
     "difficulty": "medium",
-    "tags": ["security", "secrets"]
+    "tags": [
+      "security",
+      "secrets"
+    ]
   },
   {
     "id": "kubernetes-010",
     "question": "What is the difference between a Liveness Probe and a Readiness Probe? Why are they both critical for an Airflow Webserver?",
     "answer": "A **Liveness Probe** checks if the application is fundamentally dead or locked up. If the Liveness probe fails (e.g., 3 times in a row), the Kubernetes Kubelet abruptly kills the container and restarts it.\n\nA **Readiness Probe** checks if the application is currently able to serve traffic. If it fails, Kubernetes does NOT kill the pod; it simply removes the Pod's IP address from the Service load balancer so it stops receiving incoming user requests until it recovers.\n\nFor an Airflow Webserver, both are critical. When the pod starts, parsing thousands of DAGs takes time. If you only use a Liveness probe, K8s might kill the pod while it's parsing because it's slow to respond. By using a Readiness probe pointing to `/health`, the Service won't route users to the UI until parsing is complete and the UI is responsive. The Liveness probe ensures that if the webserver fully deadlocks later, it gets forcefully rebooted.\n\n*Follow-up they'll probably ask: Does a Spark batch job need a Readiness Probe?*",
     "difficulty": "medium",
-    "tags": ["reliability", "probes"]
+    "tags": [
+      "reliability",
+      "probes"
+    ]
   },
   {
     "id": "kubernetes-011",
     "question": "What is a DaemonSet? Give a use case for a Data Engineering platform.",
     "answer": "A **DaemonSet** ensures that a copy of a specific Pod runs on *every single Node* in the cluster (or a subset of nodes matching a node selector). When a new Node is added to the cluster by an autoscaler, a DaemonSet Pod is instantly scheduled onto it. When the Node is removed, the Pod is garbage collected.\n\nFor Data Engineers managing an EKS/GKE cluster, DaemonSets are essential for **infrastructure tooling** rather than data workloads. \n\nA classic use case is log aggregation. You deploy Fluentd, Promtail, or the Datadog Agent as a DaemonSet. The agent sits on every physical node, mounts the host's `/var/log/containers/` directory, tails the standard output of every Spark and Airflow pod on that machine, and ships the logs to a central Elasticsearch or Datadog cluster.\n\n*Gotcha: DaemonSet pods consume CPU and memory on every node. If you set their resource requests too high, you might prevent larger Spark executors from scheduling on those nodes.*",
     "difficulty": "medium",
-    "tags": ["architecture", "daemonset"]
+    "tags": [
+      "architecture",
+      "daemonset"
+    ]
   },
   {
     "id": "kubernetes-012",
     "question": "Your team wants to deploy Airflow on Kubernetes. Why is it highly recommended to use the official Helm Chart rather than writing your own YAML manifests?",
     "answer": "Writing raw YAML for Airflow is immensely complex. You need Deployments for the Webserver and Scheduler, StatefulSets for Redis/Celery workers, Services, PVCs for the database, ConfigMaps for `airflow.cfg`, and complex RBAC ServiceAccounts.\n\n**Helm** is a package manager for Kubernetes. The official Apache Airflow Helm Chart abstracts this entire complex topology into a single customizable `values.yaml` file. \n\nBy tweaking the `values.yaml`, you can toggle massive architectural changes instantly: e.g., switching from `CeleryExecutor` to `KubernetesExecutor`, enabling the Git-Sync sidecar, or configuring PgBouncer for database connection pooling. Helm also handles templating and upgrades smoothly without leaving orphaned resources.\n\n```bash\nhelm repo add apache-airflow https://airflow.apache.org\nhelm install airflow apache-airflow/airflow -f custom-values.yaml -n data-ops\n```\n\n*Gotcha: Never modify the installed resources via `kubectl edit` when using Helm. The next time you run `helm upgrade`, it will overwrite your manual changes.*",
     "difficulty": "medium",
-    "tags": ["deployment", "helm", "airflow"]
+    "tags": [
+      "deployment",
+      "helm",
+      "airflow"
+    ]
   },
   {
     "id": "kubernetes-013",
     "question": "How do you achieve multi-tenancy in a shared Kubernetes data platform (e.g., isolating the Marketing team's Spark jobs from the Finance team's)?",
     "answer": "Multi-tenancy is achieved through a combination of **Namespaces**, **RBAC**, and **Resource Quotas**.\n\n1. **Namespaces**: Create distinct logical clusters (`marketing-ns`, `finance-ns`). This isolates Service DNS names and avoids naming collisions.\n2. **RBAC (Role-Based Access Control)**: Create a `Role` (not a `ClusterRole`) in the `finance-ns` granting `create pods` permissions. Bind that Role to the Finance team's Jenkins/CI service account using a `RoleBinding`. This physically prevents Marketing from launching pods in Finance's namespace.\n3. **Resource Quotas**: Prevent one team from hogging the whole cluster. Apply a ResourceQuota to `marketing-ns` limiting them to 100 CPU cores and 500Gi RAM total. If their Spark jobs request 101 cores, the API rejects the submission.\n\n```yaml\napiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: finance-quota\n  namespace: finance-ns\nspec:\n  hard:\n    requests.cpu: \"200\"\n    requests.memory: 1000Gi\n```\n\n*Follow-up they'll probably ask: Can a Pod in the Marketing namespace communicate over the network with a Pod in the Finance namespace?*",
     "difficulty": "medium",
-    "tags": ["security", "multi-tenancy", "rbac"]
+    "tags": [
+      "security",
+      "multi-tenancy",
+      "rbac"
+    ]
   },
   {
     "id": "kubernetes-014",
     "question": "Explain the difference between the Horizontal Pod Autoscaler (HPA) and the Cluster Autoscaler. How do they work together?",
     "answer": "The **Horizontal Pod Autoscaler (HPA)** scales the number of *Pods* in a Deployment based on metrics like CPU utilization or custom Datadog metrics. If the Airflow Webserver CPU hits 80%, HPA changes the Deployment replica count from 2 to 4. \n\nThe **Cluster Autoscaler (CA)** (or tools like Karpenter) scales the physical *Nodes* (EC2 instances). It watches for Pods that are stuck in the `Pending` state because the cluster has run out of CPU/Memory capacity. When it sees Pending pods, it makes an API call to AWS to provision a new EC2 node.\n\n**Working together:** A traffic spike hits Airflow. HPA scales the Webserver Pods from 2 to 10. The existing nodes only have space for 3 new pods. 5 pods go into `Pending`. The Cluster Autoscaler detects the Pending pods and boots 2 new EC2 nodes. Once the nodes join the cluster, the 5 pending pods are scheduled and begin serving traffic.\n\n*Gotcha: Booting an EC2 node takes 2-5 minutes. If your traffic spikes instantly, your application will suffer downtime while waiting for the CA. You mitigate this by overprovisioning slightly (running 'pause' dummy pods).* ",
     "difficulty": "medium",
-    "tags": ["scaling", "architecture"]
+    "tags": [
+      "scaling",
+      "architecture"
+    ]
   },
   {
     "id": "kubernetes-015",
     "question": "If you deploy Apache Kafka on Kubernetes, why must you use a 'Headless Service' rather than a standard Service?",
     "answer": "A standard Kubernetes Service provides a single internal IP address and load-balances traffic randomly across the backing Pods. \n\nKafka clients (producers and consumers) are smart. They don't want a load balancer. They need to connect to the *exact* broker that is the leader for the specific partition they are reading/writing. If a producer trying to write to Partition 1 gets load-balanced to Broker 2 (which isn't the leader), the write fails.\n\nA **Headless Service** (`clusterIP: None`) does not load-balance. Instead, it creates a DNS A record for *every single Pod* in the StatefulSet. This allows Kafka clients to resolve and connect directly to individual brokers (e.g., `kafka-0.broker-svc.default.svc.cluster.local`) bypassing the kube-proxy entirely.\n\n```yaml\napiVersion: v1\nkind: Service\nmetadata:\n  name: kafka-headless\nspec:\n  clusterIP: None\n  selector:\n    app: kafka\n```\n\n*Gotcha: Exposing Kafka brokers to clients OUTSIDE the Kubernetes cluster requires a complex setup of NodePorts or dedicated Ingress routes per broker, as a single Ingress cannot route TCP traffic to specific brokers based on partition logic.*",
     "difficulty": "medium",
-    "tags": ["networking", "kafka", "statefulset"]
+    "tags": [
+      "networking",
+      "kafka",
+      "statefulset"
+    ]
   },
   {
     "id": "kubernetes-016",
     "question": "When running Spark on Kubernetes, how do you handle Spark Shuffle data efficiently since Pods are ephemeral?",
     "answer": "During a shuffle (e.g., `groupByKey` or `join`), Spark executors write temporary shuffle data to local disk. \n\nBy default, Kubernetes pods use an `emptyDir` volume backed by the Node's root EBS volume. If the shuffle is massive, it will fill the root volume, causing the Kubelet to issue a `DiskPressure` eviction, killing the Spark job.\n\nTo optimize this:\n1. **HostPath / NVMe**: Use AWS instances with local NVMe instance store disks (e.g., `i3` or `r5d`). Mount this ultra-fast local disk into the Spark executor pods using an `emptyDir` backed by a `hostPath`. This provides massive IOPS for shuffles and prevents root disk exhaustion.\n2. **External Shuffle Service**: In traditional YARN, an external shuffle service prevents shuffle data loss if an executor dies. On Kubernetes, this is natively difficult. Apache Spark 3.2+ introduced Kubernetes native **Remote Shuffle Services** (like Apache Celeborn), which offload shuffle data to dedicated shuffle-server pods, separating compute from shuffle storage entirely.\n\n*Gotcha: If using NVMe `hostPath`, the data is permanently lost if the physical EC2 node dies, but Spark can gracefully recompute lost shuffle partitions.*",
     "difficulty": "medium",
-    "tags": ["spark", "storage", "performance"]
+    "tags": [
+      "spark",
+      "storage",
+      "performance"
+    ]
   },
   {
     "id": "kubernetes-017",
     "question": "Your PySpark job keeps dying on Kubernetes with an 'OOMKilled' error, even though you set `spark.executor.memory=8g`. You check the Spark UI, and it shows plenty of free memory. Why is K8s killing it?",
     "answer": "This is the classic PySpark on K8s trap. `spark.executor.memory` only sizes the **JVM Heap**. \n\nHowever, PySpark runs Python processes *outside* the JVM. When you use Pandas UDFs or complex Python logic, Python consumes memory independent of the JVM. Furthermore, off-heap memory, direct buffers, and OS libraries consume RAM. \n\nKubernetes monitors the *total container memory usage*. If JVM Heap + Python Memory + Off-Heap Memory > Kubernetes Container Limit, the Linux OOM killer terminates the container.\n\nTo fix this, you must increase **`spark.kubernetes.memoryOverheadFactor`** (default is 0.1 or 384MB) or explicitly set **`spark.executor.memoryOverhead`**. \n\nIf you set `spark.executor.memory=8g` and `spark.executor.memoryOverhead=4g`, the Kubernetes Pod will request `12g` total, giving the Python processes breathing room without triggering an OOM kill.\n\n*Follow-up they'll probably ask: How do you debug whether it was an OOMKilled event versus a graceful Spark task failure? (Answer: `kubectl describe pod <pod-name>` will explicitly show Reason: OOMKilled in the container state).* ",
     "difficulty": "hard",
-    "tags": ["spark", "oom", "internals"]
+    "tags": [
+      "spark",
+      "oom",
+      "internals"
+    ]
   },
   {
     "id": "kubernetes-018",
     "question": "You are deploying a 24/7 Spark Structured Streaming job on Kubernetes. When you run `kubectl delete pod`, the job drops data mid-flight. How do you ensure graceful shutdown?",
     "answer": "When you delete a pod, Kubernetes sends a `SIGTERM` signal. If the container doesn't exit within the `terminationGracePeriodSeconds` (default 30s), it sends a `SIGKILL`, brutally destroying the process. Spark does not handle K8s `SIGTERM` gracefully by default; it instantly crashes.\n\nTo ensure exactly-once semantics and graceful shutdown in K8s:\n1. Enable Spark's graceful shutdown config: `spark.streaming.stopGracefullyOnShutdown=true`. This tells Spark to finish processing the current micro-batch before exiting.\n2. **Crucially**, you must trap the K8s `SIGTERM` signal using a **`preStop` hook** in your Pod spec. The `preStop` hook can execute a script or sleep, blocking the `SIGTERM` from instantly killing the JVM while Spark finishes the batch.\n3. Increase `terminationGracePeriodSeconds` to a value higher than your longest expected micro-batch (e.g., `120`).\n\n```yaml\nlifecycle:\n  preStop:\n    exec:\n      command: [\"sh\", \"-c\", \"sleep 60\"]\n```\n\n*Gotcha: If your micro-batch takes 5 minutes, but your `terminationGracePeriodSeconds` is 30s, K8s will murder the pod regardless of your Spark configs, forcing a complex recovery from the WAL.*",
     "difficulty": "hard",
-    "tags": ["streaming", "spark", "lifecycle"]
+    "tags": [
+      "streaming",
+      "spark",
+      "lifecycle"
+    ]
   },
   {
     "id": "kubernetes-019",
     "question": "You deployed a massive EKS cluster spanning 3 Availability Zones for High Availability. Your daily Spark batch job does heavy `groupBy` shuffles. You receive a $50,000 bill for 'Cross-AZ Data Transfer'. How do you fix this architectural flaw?",
     "answer": "AWS charges $0.01/GB for data transferred between Availability Zones. \n\nDuring a Spark shuffle, executors exchange massive amounts of data. If Executor A is in AZ-1 and Executor B is in AZ-2, every byte shuffled between them incurs cross-AZ charges. In a 50TB data pipeline, this networking bill can easily eclipse the EC2 compute costs.\n\nTo fix this without abandoning High Availability:\n1. **Node Affinity / Topology Constraints**: Force the Spark Operator to schedule all executors for a *single specific Spark job* into a single Availability Zone. \n2. You use Kubernetes `podAffinity` or a `nodeSelector` tied to the zone label (e.g., `topology.kubernetes.io/zone: us-east-1a`).\n3. The EKS cluster itself remains multi-AZ. If AZ-1 goes down, the next Spark job submission will fail to find nodes there, and you can dynamically route new jobs to AZ-2. But within a single run, all shuffle traffic remains local to one AZ, completely eliminating the cross-AZ networking bill.\n\n*Follow-up they'll probably ask: Does pinning a job to a single AZ affect S3 read/write speeds? (Answer: No, S3 is a regional service and access is effectively equivalent across AZs).* ",
     "difficulty": "hard",
-    "tags": ["networking", "cost-optimization", "spark"]
+    "tags": [
+      "networking",
+      "cost-optimization",
+      "spark"
+    ]
   },
   {
     "id": "kubernetes-020",
     "question": "You want to expose the Airflow Webserver and Spark History Server UI securely to your Data Engineering team over the internet. You have an Ingress Controller, but no built-in auth. How do you architect this on K8s?",
     "answer": "Exposing internal UIs directly via an Ingress is a massive security risk. Instead of configuring complex custom auth inside Airflow and Spark independently, you use the **OAuth2 Proxy Sidecar / Ingress Architecture**.\n\n1. Deploy **OAuth2 Proxy** in your cluster configured with your corporate Identity Provider (e.g., Okta, Google Workspace, Azure AD).\n2. Use an Ingress Controller like **ingress-nginx**. \n3. Add authentication annotations to the Ingress resource for Airflow and Spark UI. \n\n```yaml\nmetadata:\n  annotations:\n    nginx.ingress.kubernetes.io/auth-url: \"https://$host/oauth2/auth\"\n    nginx.ingress.kubernetes.io/auth-signin: \"https://$host/oauth2/start?rd=$escaped_request_uri\"\n```\nWhen an engineer navigates to `airflow.mycompany.com`, the NGINX Ingress intercepts the request and checks with OAuth2 Proxy. If there is no valid session cookie, it redirects them to Okta. After successful login, Okta redirects back, OAuth2 Proxy sets a cookie, and NGINX forwards the traffic to the Airflow Service. \n\n*Gotcha: The Spark History Server UI uses absolute paths in its HTML. You must ensure `spark.ui.proxyBase` is configured correctly, otherwise CSS/JS assets will 404 when routed through an Ingress path.*",
     "difficulty": "hard",
-    "tags": ["security", "ingress", "architecture"]
+    "tags": [
+      "security",
+      "ingress",
+      "architecture"
+    ]
+  },
+  {
+    "id": "kubernetes-021",
+    "difficulty": "hard",
+    "tags": [
+      "keda",
+      "autoscaling",
+      "kafka"
+    ],
+    "question": "You have a Kafka consumer deployment on Kubernetes. During peak hours, consumer lag spikes to 5M messages. During off-peak, the topic is idle. HPA does not work because CPU is flat regardless of lag. How do you implement lag-based autoscaling that can also scale to zero?",
+    "answer": "HPA uses CPU/memory metrics. Kafka lag is not a CPU metric — it is a Kafka broker metric. You need KEDA (Kubernetes Event-Driven Autoscaling).\n\n**Why HPA fails here:**\nKafka consumers process messages at a near-constant CPU rate regardless of lag. A consumer processing 100 msg/s uses the same CPU whether there are 100 or 5M messages waiting. HPA sees flat CPU and does not scale out.\n\n**KEDA architecture:**\nKafka broker -> KEDA ScaledObject polling lag metric -> adjusts Deployment replicas\n\n**Step 1: Install KEDA**\n```bash\nhelm repo add kedacore https://kedacore.github.io/charts\nhelm install keda kedacore/keda --namespace keda --create-namespace\n```\n\n**Step 2: ScaledObject for lag-based scaling**\n```yaml\napiVersion: keda.sh/v1alpha1\nkind: ScaledObject\nmetadata:\n  name: kafka-consumer-scaler\n  namespace: data-platform\nspec:\n  scaleTargetRef:\n    name: my-kafka-consumer\n  minReplicaCount: 0\n  maxReplicaCount: 50\n  cooldownPeriod: 300\n  pollingInterval: 30\n  triggers:\n    - type: kafka\n      metadata:\n        bootstrapServers: kafka-broker:9092\n        consumerGroup: my-consumer-group\n        topic: my-input-topic\n        lagThreshold: '100000'\n        offsetResetPolicy: latest\n```\n\n**Step 3: Scale-to-zero implications**\nWhen minReplicaCount is 0, KEDA scales the Deployment to 0 replicas when lag is 0 — no idle cost. On scale-up from 0, there is a cold start delay (pod scheduling + image pull + JVM startup). For latency-sensitive workloads, set minReplicaCount to 1.\n\n**Step 4: Cap replicas at partition count**\nKafka assigns at most one consumer per partition per group. Replicas beyond the partition count are idle. Set maxReplicaCount to the topic partition count.\n\n**Key failure mode:** if KEDA cannot reach the Kafka broker to poll lag, it fails open and keeps the current replica count rather than scaling down. Add a KEDA health metric to your monitoring."
+  },
+  {
+    "id": "kubernetes-022",
+    "difficulty": "hard",
+    "tags": [
+      "rbac",
+      "multi-tenancy",
+      "security"
+    ],
+    "question": "Design a multi-tenant Kubernetes RBAC model for a shared data platform where Team A (Spark), Team B (Airflow), and Team C (dbt) each need isolation — they cannot see each other's secrets or pods — but share the same cluster for cost reasons.",
+    "answer": "Multi-tenant isolation on a shared cluster requires namespace boundaries, RBAC, NetworkPolicy, and ResourceQuotas working together. Any one layer alone is insufficient.\n\n**Namespace strategy:**\n```\nNamespaces:\n  data-platform-infra   # cluster-wide tools: monitoring, logging, ingress\n  team-a-spark          # Team A's Spark jobs\n  team-b-airflow        # Team B's Airflow\n  team-c-dbt            # Team C's dbt runners\n```\n\n**Step 1: RBAC — teams can only touch their namespace**\n```yaml\napiVersion: rbac.authorization.k8s.io/v1\nkind: Role\nmetadata:\n  name: team-a-developer\n  namespace: team-a-spark\nrules:\n  - apiGroups: [\"\"]\n    resources: [\"pods\", \"pods/log\", \"services\", \"configmaps\"]\n    verbs: [\"get\", \"list\", \"watch\", \"create\", \"delete\"]\n  - apiGroups: [\"\"]\n    resources: [\"secrets\"]\n    verbs: [\"get\", \"list\"]\n---\napiVersion: rbac.authorization.k8s.io/v1\nkind: RoleBinding\nmetadata:\n  name: team-a-binding\n  namespace: team-a-spark\nsubjects:\n  - kind: Group\n    name: team-a\n    apiGroup: rbac.authorization.k8s.io\nroleRef:\n  kind: Role\n  name: team-a-developer\n  apiGroup: rbac.authorization.k8s.io\n```\nTeam A has no ClusterRole — they cannot kubectl get pods across namespaces.\n\n**Step 2: NetworkPolicy — pods cannot reach other teams' namespaces**\n```yaml\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: team-a-isolation\n  namespace: team-a-spark\nspec:\n  podSelector: {}\n  policyTypes: [Ingress, Egress]\n  ingress:\n    - from:\n        - namespaceSelector:\n            matchLabels:\n              kubernetes.io/metadata.name: team-a-spark\n        - namespaceSelector:\n            matchLabels:\n              kubernetes.io/metadata.name: data-platform-infra\n  egress:\n    - to:\n        - namespaceSelector:\n            matchLabels:\n              kubernetes.io/metadata.name: team-a-spark\n    - to: []\n      ports:\n        - port: 443\n        - port: 9092\n```\n\n**Step 3: ResourceQuotas — prevent one team from consuming all cluster resources**\n```yaml\napiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: team-a-quota\n  namespace: team-a-spark\nspec:\n  hard:\n    requests.cpu: \"100\"\n    requests.memory: 400Gi\n    pods: \"200\"\n```\n\n**The gap most teams miss:** RBAC prevents humans from seeing other namespaces. It does NOT prevent pod-to-pod network traffic without NetworkPolicy. Both layers are required."
+  },
+  {
+    "id": "kubernetes-023",
+    "difficulty": "hard",
+    "tags": [
+      "scheduling",
+      "spark",
+      "node-affinity"
+    ],
+    "question": "Your Spark jobs need GPU nodes for ML feature computation, memory-optimized nodes for join-heavy aggregations, and spot instances for non-critical batch. Airflow runs on on-demand nodes. How do you configure Kubernetes scheduling so each workload lands on the right node type automatically?",
+    "answer": "This requires node labels, taints and tolerations, node affinity, and PriorityClasses working together.\n\n**Step 1: Label and taint node groups**\n```bash\n# GPU nodes\nkubectl label nodes ip-10-0-1-100 node-type=gpu\nkubectl taint nodes ip-10-0-1-100 dedicated=gpu:NoSchedule\n\n# Memory-optimized nodes\nkubectl label nodes ip-10-0-2-100 node-type=memory-optimized\nkubectl taint nodes ip-10-0-2-100 dedicated=spark-heavy:NoSchedule\n\n# Spot nodes — no taint, batch lands here by default\nkubectl label nodes ip-10-0-3-100 node-type=spot\n\n# On-demand for stable workloads\nkubectl label nodes ip-10-0-4-100 node-type=on-demand\nkubectl taint nodes ip-10-0-4-100 dedicated=on-demand:NoSchedule\n```\n\n**Step 2: GPU Spark executor spec**\n```yaml\nspec:\n  executor:\n    tolerations:\n      - key: dedicated\n        operator: Equal\n        value: gpu\n        effect: NoSchedule\n    affinity:\n      nodeAffinity:\n        requiredDuringSchedulingIgnoredDuringExecution:\n          nodeSelectorTerms:\n            - matchExpressions:\n                - key: node-type\n                  operator: In\n                  values: [gpu]\n    resources:\n      limits:\n        nvidia.com/gpu: \"1\"\n```\n\n**Step 3: Batch jobs prefer spot, accept preemption**\n```yaml\nspec:\n  executor:\n    affinity:\n      nodeAffinity:\n        preferredDuringSchedulingIgnoredDuringExecution:\n          - weight: 80\n            preference:\n              matchExpressions:\n                - key: node-type\n                  operator: In\n                  values: [spot]\n```\nNo taint on spot nodes means batch jobs land there naturally. Add checkpoint logic to handle spot preemption (SIGTERM handler saves progress before pod is killed).\n\n**Step 4: PriorityClasses prevent batch from preempting production**\n```yaml\napiVersion: scheduling.k8s.io/v1\nkind: PriorityClass\nmetadata:\n  name: production-critical\nvalue: 1000000\n---\nkind: PriorityClass\nmetadata:\n  name: batch-low\nvalue: 100\n```\nUnder resource pressure, Kubernetes evicts batch-low pods first to make room for production-critical."
+  },
+  {
+    "id": "kubernetes-024",
+    "difficulty": "hard",
+    "tags": [
+      "persistent-volumes",
+      "stateful",
+      "storage"
+    ],
+    "question": "You need to run a stateful streaming job on Kubernetes that maintains 500GB of RocksDB state. The job must survive pod restarts without losing state and recover in under 2 minutes. Design the storage architecture.",
+    "answer": "500GB of RocksDB state on Kubernetes requires a storage architecture designed around recovery SLA, not just persistence.\n\n**Option 1: EBS Persistent Volume (recommended for under 2 minute recovery)**\n```yaml\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: rocksdb-state-pvc\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: gp3-encrypted\n  resources:\n    requests:\n      storage: 600Gi\n```\n\n```yaml\napiVersion: storage.k8s.io/v1\nkind: StorageClass\nmetadata:\n  name: gp3-encrypted\nprovisioner: ebs.csi.aws.com\nparameters:\n  type: gp3\n  iops: \"16000\"\n  throughput: \"1000\"\n  encrypted: \"true\"\nvolumeBindingMode: WaitForFirstConsumer\nreclaimPolicy: Retain\n```\n\nCritical: WaitForFirstConsumer provisions the EBS volume in the same AZ as the scheduled pod. Without this, the pod may schedule to us-east-1b while the EBS volume is in us-east-1a — attachment fails silently.\n\n**Recovery time with EBS:**\nEBS detach (15-20s) + reattach to new pod (10-15s) + RocksDB WAL replay (varies, typically 30-60s) = 60-90 seconds. Meets the 2-minute SLA.\n\n**Option 2: S3-backed checkpoint snapshots**\nPeriodically snapshot RocksDB to S3, restore on pod start.\nRecovery time: 500GB at 500 MB/s S3 throughput = 17 minutes. Does not meet the 2-minute SLA.\nUse S3 snapshots only as disaster recovery backup, not the primary recovery path.\n\n**Node failure case:**\nEBS volume is retained when the pod dies. The new pod must schedule to the same AZ. If no nodes exist in that AZ, the pod stays Pending until the cluster autoscaler adds one. Mitigate with a warm standby node per AZ.\n\n**Key setting:** reclaimPolicy: Retain prevents the EBS volume from being deleted if the PVC is accidentally deleted — critical for stateful production workloads."
+  },
+  {
+    "id": "kubernetes-025",
+    "difficulty": "hard",
+    "tags": [
+      "resource-management",
+      "quotas",
+      "debugging"
+    ],
+    "question": "Your Kubernetes cluster is experiencing 'Insufficient CPU' scheduling failures during peak batch windows, but monitoring shows average cluster CPU is only 40%. Explain the paradox and fix it without adding nodes.",
+    "answer": "40% average utilization with scheduling failures is a resource requests misconfiguration. Kubernetes schedules based on requested resources, not actual usage.\n\n**The paradox explained:**\nIf every pod requests 4 CPUs but only uses 0.5 CPUs, the scheduler sees the cluster as full (100% of requests allocated) while monitoring shows 40% actual usage. The scheduler does not see metrics-server data — it only sees the sum of resource requests.\n\n```bash\n# Verify the paradox\nkubectl describe nodes | grep -A 5 'Allocated resources'\n# Resource    Requests    Limits\n# cpu         95%         200%   <- 95% of CPUs are requested, only 40% used\n\nkubectl top nodes\n# NAME     CPU(cores)   CPU%\n# node-1   4200m        40%\n```\n\n**Fix 1: Right-size resource requests (biggest impact)**\n```bash\n# Profile actual CPU usage over 30 days via Prometheus:\n# max_over_time(rate(container_cpu_usage_seconds_total[5m])[30d:5m])\n# Set requests to P95 actual usage, not theoretical max\n```\n\n```yaml\n# Before (over-requested)\nresources:\n  requests:\n    cpu: \"4000m\"\n  limits:\n    cpu: \"8000m\"\n\n# After (right-sized)\nresources:\n  requests:\n    cpu: \"1500m\"  # actual P95 is 1.2 CPUs\n  limits:\n    cpu: \"4000m\"  # keep headroom in limits for bursts\n```\n\n**Fix 2: LimitRange to enforce sane defaults**\n```yaml\napiVersion: v1\nkind: LimitRange\nmetadata:\n  name: cpu-limit-range\n  namespace: team-a-spark\nspec:\n  limits:\n    - type: Container\n      defaultRequest:\n        cpu: \"500m\"\n      max:\n        cpu: \"8000m\"\n      maxLimitRequestRatio:\n        cpu: \"4\"\n```\n\n**Fix 3: PriorityClasses for preemption**\n```yaml\napiVersion: scheduling.k8s.io/v1\nkind: PriorityClass\nmetadata:\n  name: batch-preemptible\nvalue: 10\n\nkind: PriorityClass\nmetadata:\n  name: production\nvalue: 1000\n```\nWhen the cluster is tight, production pods preempt batch pods rather than failing to schedule.\n\n**Root cause to tell interviewers:** over-provisioned resource requests relative to actual usage. The fix is profiling real P95 usage and right-sizing — not buying more nodes."
   }
 ]
