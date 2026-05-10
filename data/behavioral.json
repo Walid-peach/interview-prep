@@ -323,5 +323,70 @@
       "tradeoffs",
       "delivery"
     ]
+  },
+  {
+    "id": "behavioral-026",
+    "difficulty": "hard",
+    "question": "Tell me about a time you had to manage a team member who was consistently underperforming — missing deadlines, producing low-quality work, or blocking the team. What did you do, and what was the outcome?",
+    "answer_guidance": "Use this to show management maturity and courageous communication. STAR: Situation: describe a real scenario where someone's underperformance had a concrete impact on the team or project — not a vague personality mismatch. Task: address it without damaging the person's dignity or the team's trust. Action: explain how you first checked whether the issue was skill, context, motivation, or something personal. Describe the direct conversation you had — what you said, how you framed it, what commitments you made together, and how you followed up. Result: describe the actual outcome honestly, whether the person improved, was redirected to a different scope, or ultimately left. Interviewers penalize candidates who never had a hard conversation ('I just supported them until things improved') or who escalated to HR without first addressing it directly. Key phrase: 'I separated the behavior from the person, and I made the expectation explicit before assuming the outcome.'",
+    "what_they_are_probing": "They are assessing whether you can handle people management with directness, empathy, and accountability — not just technical leadership.",
+    "tags": [
+      "leadership",
+      "conflict",
+      "mentoring",
+      "accountability"
+    ]
+  },
+  {
+    "id": "behavioral-027",
+    "difficulty": "hard",
+    "question": "Describe a situation where you made a significant architectural or technical decision that turned out to be wrong. How did you recognize it, and how did you lead the correction?",
+    "answer_guidance": "Use this to show intellectual honesty and correction instincts. STAR: Situation: describe a real architectural decision you owned — not one made by a committee where you can deflect. Task: own the decision and its consequences. Action: explain how you recognized the error (production failure, user feedback, cost explosion, growing technical debt), what you did to validate that it was the root cause, how you communicated the issue to your team or stakeholders without minimizing it, and how you led the correction. Result: describe what changed and what you learned about your decision-making process. Interviewers penalize candidates who cannot name a real mistake, or who describe a mistake as 'actually it worked out fine in the end.' The mistake should have had a real cost. Key phrase: 'I recognized the error when the evidence was clear, not when I had already built a narrative around why it was right.'",
+    "what_they_are_probing": "They are assessing intellectual honesty, technical leadership under failure, and whether you can correct course without ego.",
+    "tags": [
+      "failure",
+      "decision-making",
+      "leadership",
+      "accountability"
+    ]
+  },
+  {
+    "id": "behavioral-028",
+    "difficulty": "hard",
+    "question": "Tell me about a time two senior stakeholders had conflicting priorities for your work — for example, one wanted faster delivery and another wanted higher quality — and you had to navigate the conflict without escalating to your manager.",
+    "answer_guidance": "Use this to show political maturity and principled navigation. STAR: Situation: describe a real conflict between two senior stakeholders where you were caught in the middle and could not simply defer to your manager. Task: navigate the conflict and make progress without choosing sides. Action: explain how you made the conflict visible rather than hiding it — you brought both parties into the same conversation, framed the trade-off explicitly, proposed an option that partially satisfied both, and documented the decision. Result: describe how the conflict was resolved and what the team was able to deliver. Interviewers penalize candidates who say 'I always escalated' (no judgment) or 'I just picked whoever was louder' (no backbone). A strong answer shows you helped stakeholders align on a shared constraint. Key phrase: 'I did not try to satisfy both fully. I made the trade-off explicit so the decision was theirs to own, not mine to absorb.'",
+    "what_they_are_probing": "They are assessing stakeholder navigation, conflict resolution without authority, and whether you can maintain trust from multiple directions simultaneously.",
+    "tags": [
+      "conflict",
+      "stakeholders",
+      "influence",
+      "decision-making"
+    ]
+  },
+  {
+    "id": "behavioral-029",
+    "difficulty": "hard",
+    "question": "Describe a time you inherited a project that was already in crisis — behind schedule, low trust, unclear ownership — and had to turn it around.",
+    "answer_guidance": "Use this to show leadership under inherited chaos. STAR: Situation: describe a real scenario where you took over a troubled project rather than starting fresh. Task: restore delivery momentum and stakeholder trust without having caused the original problem. Action: explain your first week — how you assessed the state, identified the root causes, reset stakeholder expectations honestly (including saying 'I don't know yet' when you didn't), simplified scope, and rebuilt the team's confidence through small visible wins. Result: describe what the project looked like after your intervention, even if you did not fully deliver the original scope. Interviewers penalize candidates who say they 'took over and fixed everything' with no detail on what was broken or how. They also penalize candidates who spent the first month blaming the previous owner. Key phrase: 'The first thing I did was stop the bleeding — stabilize, assess, and reset expectations — before I made any promises about recovery.'",
+    "what_they_are_probing": "They are assessing crisis leadership, situation assessment, expectation management, and whether you can lead under conditions you did not create.",
+    "tags": [
+      "leadership",
+      "ownership",
+      "stakeholders",
+      "delivery"
+    ]
+  },
+  {
+    "id": "behavioral-030",
+    "difficulty": "hard",
+    "question": "Tell me about a time you had to decide how to split your team's capacity between a critical new feature and significant technical debt, when leadership was pushing hard for the feature and the engineering team was pushing hard for the cleanup.",
+    "answer_guidance": "Use this to show engineering leadership and organizational navigation. STAR: Situation: describe a real scenario where business pressure and engineering health were in direct tension, and you were the one who had to make or drive the call. Task: make a defensible allocation decision that preserved both delivery credibility and engineering trust. Action: explain how you quantified the debt's cost (slower delivery, incidents, onboarding friction) in terms leadership could understand, proposed a concrete split (e.g., 70/30 per sprint) with explicit acceptance criteria for the debt work, and held the line when the split was challenged. Result: describe whether the balance held and what the outcome was for both tracks. Interviewers penalize candidates who describe an abstract philosophy about tech debt. They want a specific decision with a specific allocation and a specific outcome. Key phrase: 'I translated technical debt into business cost so leadership could make an informed trade-off, not a blind one.'",
+    "what_they_are_probing": "They are assessing technical leadership, business communication, and the ability to protect engineering sustainability without losing delivery credibility.",
+    "tags": [
+      "prioritization",
+      "leadership",
+      "tradeoffs",
+      "delivery"
+    ]
   }
 ]

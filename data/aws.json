@@ -4,139 +4,264 @@
     "question": "What is the difference between an IAM User and an IAM Role, and which should you use for a Databricks or Airflow worker cluster?",
     "answer": "An **IAM User** is an identity with long-term credentials (a password and static Access Keys). An **IAM Role** is an identity that applications or services can assume to gain short-lived, temporary security credentials. \n\nFor compute infrastructure like an Airflow worker on EC2 or a Databricks cluster, you must **never** use an IAM User with hardcoded Access Keys. Instead, you attach an **IAM Instance Profile** (which passes an IAM Role) directly to the compute instance. The AWS SDK (boto3) or Spark automatically retrieves and rotates the temporary credentials via the EC2 metadata service, ensuring zero hardcoded secrets and following best security practices.\n\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": \"s3:GetObject\",\n      \"Resource\": \"arn:aws:s3:::my-medallion-lake/*\"\n    }\n  ]\n}\n```\n\n*Gotcha: If an attacker gains shell access to your worker node, they can query the metadata service (`169.254.169.254`) and extract the temporary role credentials to use externally.*",
     "difficulty": "easy",
-    "tags": ["iam", "security"]
+    "tags": [
+      "iam",
+      "security"
+    ]
   },
   {
     "id": "aws-002",
     "question": "How do you manage data lifecycle and costs in Amazon S3 for a growing Medallion architecture data lake?",
     "answer": "You manage costs by utilizing **S3 Storage Classes** and automating transitions using **S3 Lifecycle Rules**. \n\nData lakes grow infinitely, but data temperature cools down. \n- **S3 Standard**: Used for hot data queried daily (e.g., the Gold layer and recent Silver data).\n- **S3 Standard-IA (Infrequent Access)**: Used for data accessed less than once a month (e.g., historical Bronze raw data). Cheaper storage, but charges a data retrieval fee.\n- **S3 Glacier Deep Archive**: Used for compliance retention (e.g., 7-year retention logs). Taking hours to retrieve, but incredibly cheap.\n\n```json\n{\n  \"Rules\": [\n    {\n      \"ID\": \"Archive Bronze Data\",\n      \"Filter\": { \"Prefix\": \"bronze/\" },\n      \"Status\": \"Enabled\",\n      \"Transitions\": [\n        { \"Days\": 90, \"StorageClass\": \"STANDARD_IA\" },\n        { \"Days\": 365, \"StorageClass\": \"GLACIER\" }\n      ]\n    }\n  ]\n}\n```\n\n*Gotcha: Standard-IA has a minimum storage duration of 30 days and a minimum object size of 128KB. Transitioning millions of 10KB JSON files to IA will actually cost you more money.*",
     "difficulty": "easy",
-    "tags": ["s3", "cost-optimization"]
+    "tags": [
+      "s3",
+      "cost-optimization"
+    ]
   },
   {
     "id": "aws-003",
     "question": "What is the difference between Amazon Kinesis Data Streams and Kinesis Data Firehose?",
     "answer": "**Kinesis Data Streams (KDS)** is a highly customizable, low-latency streaming service. You must write custom consumer code (e.g., a Spark Structured Streaming job or Lambda) to read the data. Data is stored for up to 365 days. It is used for real-time analytics and complex event processing.\n\n**Kinesis Data Firehose (KDF)** is a fully managed delivery service. You don't write consumer code. Firehose automatically captures, transforms (via an optional Lambda), batches, and loads streaming data into destinations like Amazon S3, Redshift, or OpenSearch. It has higher latency (typically 60+ seconds) because it relies on buffering data by size or time before writing.\n\n*Follow-up they'll probably ask: If your downstream system is a Delta Lake on S3, which service would you use to ingest a massive API event stream?*",
     "difficulty": "easy",
-    "tags": ["streaming", "architecture"]
+    "tags": [
+      "streaming",
+      "architecture"
+    ]
   },
   {
     "id": "aws-004",
     "question": "What is Amazon Athena, and when should a data engineer use it instead of Redshift?",
     "answer": "Amazon Athena is an interactive, serverless query service that allows you to analyze data directly in Amazon S3 using standard SQL (Presto/Trino under the hood). \n\nYou should use Athena for ad-hoc querying, data exploration, or lightweight reporting where spinning up a dedicated data warehouse is overkill. It charges $5 per Terabyte of data scanned. \n\nYou should use **Amazon Redshift** for complex, highly concurrent, sub-second latency BI dashboards and heavy enterprise reporting. Redshift is a provisioned cluster (though Serverless exists) that requires loading data into its proprietary storage for maximum performance.\n\n```sql\n-- Standard Athena query against a partitioned S3 external table\nSELECT count(*), status \nFROM my_database.bronze_events \nWHERE year = '2023' AND month = '10'\nGROUP BY status;\n```\n\n*Gotcha: Because Athena charges per byte scanned, querying an unpartitioned, uncompressed CSV dataset in S3 can result in a massive surprise bill.*",
     "difficulty": "easy",
-    "tags": ["athena", "analytics"]
+    "tags": [
+      "athena",
+      "analytics"
+    ]
   },
   {
     "id": "aws-005",
     "question": "Explain S3 Partitioning strategies (Hive format). Why is it critical for PySpark performance?",
     "answer": "Partitioning organizes data in S3 using a directory-like structure based on column values, typically known as the Hive format: `s3://my-bucket/table/year=2023/month=10/day=15/`.\n\nIt is critical for PySpark (and Athena) performance because it enables **Partition Pruning**. If a Spark job runs `spark.read.parquet(\"s3://my-bucket/table/\").filter(col(\"year\") == 2023)`, Spark will only read the objects within the `year=2023/` prefix. It entirely ignores the rest of the bucket, saving massive amounts of network I/O, S3 GET request costs, and compute time.\n\n```python\n# Writing a partitioned dataset in PySpark\ndf.write \\\n  .mode(\"append\") \\\n  .partitionBy(\"year\", \"month\") \\\n  .parquet(\"s3://medallion-lake/silver/orders/\")\n```\n\n*Gotcha: Over-partitioning (e.g., partitioning by `user_id` resulting in 500,000 partitions) creates millions of tiny files. S3 API calls (LIST/GET) will become the bottleneck, drastically slowing down the job.*",
     "difficulty": "medium",
-    "tags": ["s3", "spark", "performance"]
+    "tags": [
+      "s3",
+      "spark",
+      "performance"
+    ]
   },
   {
     "id": "aws-006",
     "question": "We are migrating an Airflow DAG that currently triggers via a schedule. We want it to trigger exactly when an external vendor drops a file into our S3 bucket. How do you architect this in AWS?",
     "answer": "You transition from a batch schedule to an **Event-Driven Architecture**.\n\n1. Configure **S3 Event Notifications** on the specific bucket and prefix (e.g., `vendor_data/`).\n2. Route the S3 event (an `ObjectCreated` action) to an **Amazon EventBridge** rule or an **Amazon SQS** queue.\n3. **Airflow Side:** If using SQS, you can deploy an Airflow `SqsSensor` that polls the queue. Once the message appears, the DAG continues and processes the exact file key listed in the message payload. \n\nAlternatively, you can have EventBridge trigger an AWS Lambda function, which makes a REST API call to Airflow's API to trigger the DAG run directly, pushing the event rather than Airflow polling for it.\n\n```json\n// Example S3 Event payload\n{\n  \"detail-type\": \"Object Created\",\n  \"source\": \"aws.s3\",\n  \"detail\": {\n    \"bucket\": { \"name\": \"vendor-drop-zone\" },\n    \"object\": { \"key\": \"vendor_data/2023-10-15.csv\" }\n  }\n}\n```\n\n*Gotcha: S3 Event Notifications are not guaranteed to be delivered strictly in order. If the vendor overwrites a file rapidly, your pipeline must handle idempotency.*",
     "difficulty": "medium",
-    "tags": ["s3", "event-driven", "airflow"]
+    "tags": [
+      "s3",
+      "event-driven",
+      "airflow"
+    ]
   },
   {
     "id": "aws-007",
     "question": "Your Airflow instances need to access AWS secrets, but you cannot hardcode them. What is the difference between AWS Secrets Manager and Systems Manager Parameter Store?",
     "answer": "Both services securely store configuration data, but they have distinct features and pricing.\n\n**AWS Secrets Manager** is specifically designed for secrets. It natively supports automatic credential rotation (e.g., rotating an RDS password every 30 days via Lambda). It is relatively expensive ($0.40 per secret/month + API call costs).\n\n**SSM Parameter Store** is a general configuration store that supports `SecureString` parameters (encrypted via KMS). It does not support native automated rotation. However, standard parameters are free, and API limits are high.\n\nFor Airflow, you can configure the `SecretsBackend` to point to Secrets Manager to fetch Connections dynamically at runtime, avoiding storing database passwords in Airflow's metadata database.\n\n```python\n# Fetching a secret via boto3 if not using Airflow SecretsBackend\nimport boto3\nclient = boto3.client('secretsmanager')\nresponse = client.get_secret_value(SecretId='prod/redshift/etl_user')\n```\n\n*Follow-up they'll probably ask: Which service would you choose to store 5,000 different API keys for client integrations?*",
     "difficulty": "medium",
-    "tags": ["security", "secrets"]
+    "tags": [
+      "security",
+      "secrets"
+    ]
   },
   {
     "id": "aws-008",
     "question": "You need to grant your Databricks cluster in Account A access to read an S3 bucket in Account B. How do you implement this cross-account access securely?",
     "answer": "Cross-account access relies on **AssumeRole** and trusting the identity.\n\n1. **In Account B (Resource Account):** Create an IAM Role (e.g., `CrossAccountDataRole`). \n2. Attach a permissions policy to this role allowing `s3:GetObject` on the specific bucket.\n3. Modify the **Trust Policy** of this role to allow Account A's root (or specific IAM Role) to assume it:\n```json\n{\n  \"Effect\": \"Allow\",\n  \"Principal\": { \"AWS\": \"arn:aws:iam::ACCOUNT_A_ID:role/DatabricksClusterRole\" },\n  \"Action\": \"sts:AssumeRole\"\n}\n```\n4. **In Account A (Compute Account):** Ensure the `DatabricksClusterRole` has a policy allowing `sts:AssumeRole` targeting the ARN of the role in Account B.\n5. In your PySpark job, configure the Hadoop AWS credentials provider to assume the role dynamically when querying that specific S3 path.\n\n*Gotcha: If the S3 bucket in Account B is encrypted with a customer-managed KMS key, the role in Account B must also have `kms:Decrypt` permissions on that key, AND the KMS key policy must allow the role.*",
     "difficulty": "medium",
-    "tags": ["iam", "security", "architecture"]
+    "tags": [
+      "iam",
+      "security",
+      "architecture"
+    ]
   },
   {
     "id": "aws-009",
     "question": "What is the small files problem in S3, and how does it impact AWS Glue or PySpark jobs?",
     "answer": "The small files problem occurs when an S3 path contains hundreds of thousands (or millions) of files smaller than 10MB (often caused by over-partitioning or high-frequency micro-batch streaming). \n\nBecause S3 is an object store accessible via HTTP APIs, reading data requires a `LIST` API call followed by `GET` requests. PySpark has to make an individual HTTP GET request for every single tiny file. The network latency of opening and closing these connections vastly exceeds the time spent actually processing the data. Furthermore, AWS charges per 1,000 API requests, meaning your S3 bill will explode.\n\nTo fix this, you run a **Compaction Job**. You read the small files and rewrite them as larger files (ideally 128MB to 1GB Parquet chunks).\n\n```python\n# Compaction in PySpark\ndf = spark.read.parquet(\"s3://bucket/streaming_landing/\")\n# Coalesce reduces the number of partitions in memory before writing\ndf.coalesce(10).write.mode(\"overwrite\").parquet(\"s3://bucket/compacted/\")\n```\n\n*Follow-up they'll probably ask: Does Delta Lake or Apache Iceberg offer native features to solve this?*",
     "difficulty": "medium",
-    "tags": ["s3", "spark", "performance"]
+    "tags": [
+      "s3",
+      "spark",
+      "performance"
+    ]
   },
   {
     "id": "aws-010",
     "question": "Compare AWS Step Functions with Managed Workflows for Apache Airflow (MWAA). When would you choose one over the other?",
     "answer": "**AWS Step Functions** is a serverless orchestration service that uses state machines defined in JSON (Amazon States Language). It excels at orchestrating AWS-native serverless workflows (e.g., Lambda -> Glue -> Athena) with extremely low latency, high concurrency, and zero infrastructure management.\n\n**MWAA** is Amazon's managed service for Apache Airflow. Airflow uses Python to define DAGs. It excels at complex data engineering pipelines with massive dependency trees, complex backfilling logic, and a vast ecosystem of third-party operators (Snowflake, Databricks, dbt).\n\nI would choose MWAA for a Medallion architecture data platform because Data Engineers prefer writing pipelines in Python rather than JSON, and Airflow's ecosystem for modern data stack tools is unmatched. I would choose Step Functions for microservice orchestration or lightweight, purely AWS-native event-driven architectures.\n\n*Gotcha: MWAA can be surprisingly expensive just to sit idle, whereas Step Functions charges per state transition.*",
     "difficulty": "medium",
-    "tags": ["orchestration", "airflow"]
+    "tags": [
+      "orchestration",
+      "airflow"
+    ]
   },
   {
     "id": "aws-011",
     "question": "You are migrating an on-prem data lake (MinIO) to Amazon S3. The data size is 50 Terabytes. How do you handle this transfer efficiently?",
     "answer": "For 50TB, using standard CLI commands like `aws s3 sync` over the public internet is unreliable, slow, and prone to network interruptions.\n\nI would use **AWS DataSync**. DataSync is an automated data transfer service. You deploy a DataSync Agent (a VM) in your on-premise data center. The agent connects to your MinIO cluster (via SMB, NFS, or self-managed object storage APIs) and transfers the data directly to S3. DataSync automatically handles parallelization, data encryption in transit, network bandwidth throttling (to not crash the office internet), and data integrity validation.\n\nIf the office internet bandwidth is extremely limited (e.g., it would take months to transfer 50TB), I would order an **AWS Snowball Edge**, a physical ruggedized storage device shipped to the data center, load the data locally via 10Gbps ethernet, and ship it back to AWS.\n\n*Follow-up they'll probably ask: Once the 50TB is migrated, how do you keep the new on-prem data flowing while the apps are cut over?*",
     "difficulty": "medium",
-    "tags": ["migration", "s3"]
+    "tags": [
+      "migration",
+      "s3"
+    ]
   },
   {
     "id": "aws-012",
     "question": "Explain Redshift Distribution Styles. Why is choosing the wrong style detrimental to query performance?",
     "answer": "Redshift is a Massively Parallel Processing (MPP) database consisting of compute nodes. Distribution styles determine how data is spread across these nodes.\n\n1. **EVEN**: Data is distributed round-robin. Good for tables without clear join patterns.\n2. **ALL**: A full copy of the table is placed on *every* compute node. Excellent for small lookup/dimension tables (e.g., `dim_country`). It avoids network traffic during joins.\n3. **KEY**: Data is distributed according to the values in a specific column. \n\nChoosing the wrong style is detrimental because of **Data Broadcasting/Redistribution**. If you join a massive 1-billion-row `fct_sales` table with a 50-million-row `dim_users` table, and they are not distributed on the same join key (`user_id`), Redshift has to shuffle terabytes of data across the network between nodes to execute the join, crushing query performance.\n\n```sql\nCREATE TABLE fct_sales (\n  order_id INT,\n  user_id INT\n) DISTSTYLE KEY DISTKEY (user_id);\n```\n\n*Gotcha: Redshift now offers AUTO distribution, which changes from ALL to EVEN as the table grows, but explicitly defining KEY distribution is still required for massive fact-to-fact joins.*",
     "difficulty": "medium",
-    "tags": ["redshift", "performance"]
+    "tags": [
+      "redshift",
+      "performance"
+    ]
   },
   {
     "id": "aws-013",
     "question": "How do you handle EC2 Spot Instance interruptions for worker nodes in an EMR or Databricks cluster?",
     "answer": "Spot Instances provide up to 90% discounts on EC2 compute, but AWS can terminate them with a 2-minute warning if capacity is needed.\n\nIn a Spark architecture (EMR or Databricks):\n1. **Core/Driver Nodes**: Must *always* be On-Demand instances. If the driver or HDFS name node dies, the entire cluster fails.\n2. **Task/Worker Nodes**: Can be Spot instances. These nodes only process data and do not hold HDFS state.\n\nWhen a Spot node is interrupted, Spark is highly resilient. It will detect the lost executor, re-assign the lost partitions (Tasks) to surviving nodes, and recalculate them. \n\nTo optimize this, ensure you use managed instance groups that automatically request replacement Spot capacity from different availability zones or instance families (e.g., fall back from `r5.xlarge` to `r4.xlarge`) to maximize availability.\n\n*Gotcha: If your Spark job involves heavy shuffles, a lost Spot node might lose shuffle data required by other nodes, causing massive recomputation delays. Use external shuffle services to mitigate this.*",
     "difficulty": "medium",
-    "tags": ["ec2", "cost-optimization", "spark"]
+    "tags": [
+      "ec2",
+      "cost-optimization",
+      "spark"
+    ]
   },
   {
     "id": "aws-014",
     "question": "What is the difference between securing an S3 Data Lake using IAM/Bucket Policies versus using AWS Lake Formation?",
     "answer": "Using pure **IAM and S3 Bucket Policies** only allows you to secure data at the *file* or *prefix* level (e.g., \"User A can read `s3://bucket/finance/*`\"). It cannot understand what is inside the Parquet files.\n\n**AWS Lake Formation** acts as a centralized governance layer on top of S3 and the Glue Data Catalog. It allows you to enforce security at the database, table, **column**, and **row** level. \n\nFor example, using Lake Formation, you can grant a Data Analyst access to the `users` table, but explicitly deny access to the `social_security_number` column, or filter rows so they only see users in their specific country. This is enforced regardless of whether they query via Athena, EMR, or Redshift Spectrum.\n\n*Follow-up they'll probably ask: Does Lake Formation work if an engineer uses a raw Python script to read the underlying S3 objects directly, bypassing Athena?*",
     "difficulty": "medium",
-    "tags": ["lake-formation", "security", "s3"]
+    "tags": [
+      "lake-formation",
+      "security",
+      "s3"
+    ]
   },
   {
     "id": "aws-015",
     "question": "You are designing an ETL pipeline using PySpark. Why is the AWS Glue Data Catalog preferred over spinning up your own Hive Metastore on EC2?",
     "answer": "The Glue Data Catalog is a fully managed, serverless, highly available Hive-compatible metastore. \n\nRunning your own Hive Metastore requires provisioning EC2 instances, managing an RDS Postgres database for the state, handling high availability, patching OS vulnerabilities, and scaling connections.\n\nThe Glue Data Catalog integrates natively out-of-the-box with almost every AWS analytics service (Athena, EMR, Redshift Spectrum, Glue ETL) and third-party tools like Databricks and Snowflake. You simply point your Spark configuration to use Glue (`spark.hadoop.hive.metastore.client.factory.class = com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory`), and you instantly get a centralized catalog of all your data lake tables without managing any infrastructure.\n\n*Gotcha: Glue Data Catalog API calls are cheap, but if you have thousands of partitions and poor query design, the API throttle limits can bottleneck your Spark jobs.*",
     "difficulty": "medium",
-    "tags": ["glue", "architecture"]
+    "tags": [
+      "glue",
+      "architecture"
+    ]
   },
   {
     "id": "aws-016",
     "question": "How do you safely manage Terraform state files in AWS?",
     "answer": "Terraform state files (`terraform.tfstate`) map your code to real-world infrastructure. They contain highly sensitive data, including database passwords and API keys in plaintext.\n\nTo manage them safely in AWS:\n1. Store the state in a central **S3 Bucket**. \n2. Enable **S3 Versioning** to recover from accidental state deletions or corruptions.\n3. Enable **Server-Side Encryption (KMS)** to encrypt the state file at rest.\n4. Apply a strict IAM Bucket Policy restricting access to only the CI/CD pipeline role.\n5. Most importantly, use an **Amazon DynamoDB table** for state locking. This prevents two CI/CD runners (or developers) from running `terraform apply` concurrently, which would corrupt the state file.\n\n```hcl\nterraform {\n  backend \"s3\" {\n    bucket         = \"my-tf-state-bucket\"\n    key            = \"data-platform/terraform.tfstate\"\n    region         = \"eu-west-1\"\n    dynamodb_table = \"terraform-state-locks\"\n    encrypt        = true\n  }\n}\n```\n\n*Follow-up they'll probably ask: What is the exact IAM permission required on the DynamoDB table for state locking? (Answer: `dynamodb:PutItem`, `GetItem`, and `DeleteItem`).*",
     "difficulty": "medium",
-    "tags": ["terraform", "state-management"]
+    "tags": [
+      "terraform",
+      "state-management"
+    ]
   },
   {
     "id": "aws-017",
     "question": "Your company is receiving a massive $10,000/month bill for 'NAT Gateway Data Processing'. You discover it's because your private EMR/Databricks workers are reading/writing Terabytes of data to S3. How do you fix this?",
     "answer": "By default, instances in a private subnet route all internet-bound traffic through a NAT Gateway in the public subnet. Because S3 is a public AWS service, traffic from your private workers goes through the NAT Gateway. AWS charges a hefty per-GB processing fee for all data passing through a NAT Gateway.\n\nTo fix this, you deploy a **VPC Gateway Endpoint for S3**. \n\nA Gateway Endpoint modifies your VPC route table. It creates a direct, private tunnel from your private subnet directly to the S3 service, bypassing the NAT Gateway entirely. S3 traffic routed through a Gateway Endpoint incurs **zero data processing charges**. \n\n```bash\n# Creating the VPC Endpoint via CLI\naws ec2 create-vpc-endpoint \\\n    --vpc-id vpc-12345678 \\\n    --service-name com.amazonaws.us-east-1.s3 \\\n    --route-table-ids rtb-12345678\n```\n\n*Gotcha: Gateway Endpoints only work for S3 and DynamoDB. For other services like Kinesis or Secrets Manager, you must use Interface Endpoints (AWS PrivateLink), which still charge an hourly fee and a per-GB processing fee.*",
     "difficulty": "hard",
-    "tags": ["networking", "cost-optimization"]
+    "tags": [
+      "networking",
+      "cost-optimization"
+    ]
   },
   {
     "id": "aws-018",
     "question": "We need to ingest a massive, highly-active DynamoDB table into our S3 data lake (Delta format) daily. Running a full table scan kills DynamoDB performance. How do you design this CDC pipeline?",
     "answer": "Running a full scan on an active DynamoDB table consumes Read Capacity Units (RCUs), causing production applications to throttle. You must build an incremental Change Data Capture (CDC) pipeline.\n\n1. Enable **DynamoDB Streams**. This creates a time-ordered sequence of item-level modifications (INSERT, UPDATE, DELETE).\n2. Connect the stream to an AWS Lambda function or a Kinesis Data Stream via Kinesis Adapter.\n3. The Lambda (or a Spark Structured Streaming job reading Kinesis) parses the JSON stream records.\n4. The streaming job writes the changes incrementally into the S3 Delta Lake using the `MERGE INTO` operation. \n\nAlternatively, AWS recently released **DynamoDB zero-ETL integration with S3 (Export to S3)**. You can configure DynamoDB to automatically export table snapshots or incremental changes directly to S3 in Parquet format without consuming RCUs or writing any custom stream-processing code.\n\n*Follow-up they'll probably ask: How does the Delta Lake merge logic handle a DynamoDB \"REMOVE\" event?*",
     "difficulty": "hard",
-    "tags": ["dynamodb", "cdc", "architecture"]
+    "tags": [
+      "dynamodb",
+      "cdc",
+      "architecture"
+    ]
   },
   {
     "id": "aws-019",
     "question": "A PySpark job running on EKS in Account A needs to read data from an S3 bucket in Account B. The bucket is encrypted with a Customer Managed KMS Key located in Account B. Walk me through the exact IAM and KMS policies required.",
     "answer": "This is a complex cross-account security scenario requiring three separate policy alignments:\n\n1. **The IAM Role (Account A):** The EKS pod's IAM Role must have an identity-based policy allowing `s3:GetObject` on the bucket ARN and `kms:Decrypt` on the KMS Key ARN.\n2. **The S3 Bucket Policy (Account B):** The bucket policy must explicitly grant `s3:GetObject` to the Principal ARN of the IAM Role in Account A.\n3. **The KMS Key Policy (Account B):** The KMS key policy must explicitly grant `kms:Decrypt` and `kms:GenerateDataKey` to the Principal ARN of the IAM Role in Account A.\n\nIf *any* of these three policies deny access (or fail to explicitly allow it), the access is blocked. \n\n```json\n// Snippet of the KMS Key Policy in Account B\n{\n  \"Effect\": \"Allow\",\n  \"Principal\": { \"AWS\": \"arn:aws:iam::ACCOUNT_A_ID:role/EksSparkRole\" },\n  \"Action\": [\"kms:Decrypt\", \"kms:GenerateDataKey\"],\n  \"Resource\": \"*\"\n}\n```\n\n*Gotcha: Cross-account access to default AWS Managed Keys (`aws/s3`) is strictly forbidden by AWS. You must use a Customer Managed Key (CMK) to share encrypted data across accounts.*",
     "difficulty": "hard",
-    "tags": ["iam", "security", "kms", "s3"]
+    "tags": [
+      "iam",
+      "security",
+      "kms",
+      "s3"
+    ]
   },
   {
     "id": "aws-020",
     "question": "Amazon S3 is now strongly consistent. Historically, it was eventually consistent. What were the edge cases of eventual consistency, and how did it affect Apache Spark's S3 committers before this change?",
     "answer": "Historically, S3 offered eventual consistency for overwrite PUTs and DELETEs. If you overwrote a file and immediately called GET, you might receive the old version. Worse, \"List-after-write\" consistency had edge cases: if you listed a directory immediately after writing a file, the file might not appear in the list.\n\nThis was catastrophic for Apache Spark. Spark's default output committer writes data to temporary files (e.g., `_temporary/0/task_1.parquet`) and then issues a `RENAME` operation to move them to the final directory. Because S3 is an object store, `RENAME` is actually a `COPY` followed by a `DELETE`. Due to eventual consistency, Spark would list the directory, miss files, and incorrectly report success while losing data.\n\nTo solve this, AWS created the **S3A Magic Committer** and Netflix created the **S3mper** library, which used DynamoDB to track strong consistency state. \n\nIn late 2020, AWS made S3 strongly consistent for all operations globally. Spark jobs no longer require external databases for consistency tracking, allowing data engineers to rely on native S3 APIs safely.\n\n*Follow-up they'll probably ask: Even with strong consistency, why is the `RENAME` operation in Spark still a massive performance bottleneck on S3?*",
     "difficulty": "hard",
-    "tags": ["s3", "spark", "internals"]
+    "tags": [
+      "s3",
+      "spark",
+      "internals"
+    ]
+  },
+  {
+    "id": "aws-021",
+    "difficulty": "hard",
+    "tags": [
+      "lake-formation",
+      "governance",
+      "security"
+    ],
+    "question": "Your data platform uses Lake Formation for fine-grained access control, but a data scientist complains they can see rows in Athena they shouldn't. You have Lake Formation RLS configured, IAM policies set, and S3 bucket policies in place. How do you diagnose which layer is the bypass and fix it?",
+    "answer": "Three-layer access control creates three possible bypass vectors. Diagnose each layer independently.\n\n**Understanding the precedence model:**\nLake Formation sits above S3 but below the query engine. The access check order is:\n1. IAM must allow the Athena + Glue Data Catalog actions\n2. Lake Formation checks table/column/row-level permissions\n3. S3 bucket policy must allow the IAM principal to read the objects\n\nIf any one of the three is too permissive AND the others are misconfigured, data leaks.\n\n**Common bypass scenario 1: IAM admin passthrough**\nIf the user has `IAMAllowedPrincipals` on the table in Lake Formation, Lake Formation is bypassed entirely — IAM alone controls access. This is the default for tables registered before Lake Formation was fully adopted.\n```bash\naws lakeformation get-resource-lf-tags --resource '{\"Table\":{...}}'\naws lakeformation list-permissions --resource '{\"Table\":{...}}'\n# Look for IAMAllowedPrincipals entries\n```\nFix: revoke `IAMAllowedPrincipals` and explicitly grant the right principals.\n\n**Common bypass scenario 2: S3 direct access**\nIf the user's IAM role has `s3:GetObject` on the raw S3 path and they query via Spark (not Athena), Lake Formation RLS is never checked. Lake Formation only enforces at the Glue/Athena/Redshift Spectrum layer.\nFix: remove direct S3 access from analyst roles; access must go through the governed query engine.\n\n**Common bypass scenario 3: Row filter misconfiguration**\nLake Formation row filters use a SQL expression. A filter of `region = 'EU'` does NOT mean 'only show EU rows' — it means 'show rows WHERE region = EU'. If the column has NULLs or the expression is wrong, unexpected rows appear.\n```bash\naws lakeformation list-data-cells-filter --table-data '{\"DatabaseName\":\"...\",\"Name\":\"...\"}'\n```\nTest the filter expression directly in Athena as the restricted user.\n\n**Diagnosis workflow:**\n1. Enable AWS CloudTrail Lake Formation events — every `GetDataAccess` call is logged\n2. Check Lake Formation audit logs in CloudTrail for the user's ARN\n3. Use `aws lakeformation list-permissions` to dump the effective permission set\n4. Reproduce the query as the affected user using `assume-role` in a test account"
+  },
+  {
+    "id": "aws-022",
+    "difficulty": "hard",
+    "tags": [
+      "eks",
+      "irsa",
+      "security"
+    ],
+    "question": "You're running Spark on EKS. A pod needs to write to S3, read from DynamoDB, and publish to SNS — all across different AWS accounts. Walk me through setting up IRSA for this and the failure modes that will bite you in production.",
+    "answer": "IRSA (IAM Roles for Service Accounts) is the right pattern, but cross-account IRSA has specific failure modes most teams hit in production.\n\n**Single-account IRSA setup (baseline):**\n```bash\n# 1. Enable OIDC provider for your EKS cluster\neksctl utils associate-iam-oidc-provider --cluster my-cluster --approve\n\n# 2. Create IAM role with trust policy bound to the service account\naws iam create-role --role-name spark-s3-role --assume-role-policy-document '{\n  \"Statement\": [{\n    \"Effect\": \"Allow\",\n    \"Principal\": {\"Federated\": \"arn:aws:iam::111122223333:oidc-provider/oidc.eks.eu-west-1.amazonaws.com/id/EXAMPLED539D4633E53DE1B716D3041E\"},\n    \"Action\": \"sts:AssumeRoleWithWebIdentity\",\n    \"Condition\": {\"StringEquals\": {\n      \"oidc.eks.eu-west-1.amazonaws.com/id/EXAMPLED539D4633E53DE1B716D3041E:sub\": \"system:serviceaccount:spark-ns:spark-sa\"\n    }}\n  }]\n}'\n\n# 3. Annotate the Kubernetes service account\nkubectl annotate serviceaccount spark-sa \\\n  eks.amazonaws.com/role-arn=arn:aws:iam::111122223333:role/spark-s3-role\n```\n\n**Cross-account access (S3 in Account B, Spark in Account A):**\n```json\n// Account B — Role that Spark will assume into\n{\n  \"Statement\": [{\n    \"Effect\": \"Allow\",\n    \"Principal\": {\"AWS\": \"arn:aws:iam::111122223333:role/spark-s3-role\"},\n    \"Action\": \"sts:AssumeRole\"\n  }]\n}\n```\nIn the Spark job, explicitly assume the cross-account role:\n```python\nsts = boto3.client('sts')\ncreds = sts.assume_role(RoleArn='arn:aws:iam::444455556666:role/cross-account-s3',\n                        RoleSessionName='spark-job')['Credentials']\n# Pass creds to Spark S3 config\n```\n\n**Production failure modes:**\n\n1. **Token expiry mid-job.** IRSA tokens expire after 86400s by default. A 12-hour Spark job will fail mid-run when the token expires and S3 calls start returning 403. Fix: set `eks.amazonaws.com/token-expiration: \"43200\"` and ensure Spark's AWS SDK version supports token refresh.\n\n2. **Incorrect OIDC thumbprint.** AWS validates the OIDC provider certificate. If the EKS control plane cert rotates and the thumbprint isn't updated, all IRSA stops working cluster-wide.\n\n3. **`AWS_WEB_IDENTITY_TOKEN_FILE` not mounted.** The Kubernetes mutating webhook injects the env vars. If the pod spec uses `hostNetwork: true` or overrides volumes, the injection may fail silently — the pod falls back to instance profile, which has different permissions.\n\n4. **Session tag conflicts.** If your IAM roles use attribute-based access control (ABAC) with session tags, cross-account role chains propagate tags — a tag from Account A may conflict with a condition in Account B's role, causing silent denies."
+  },
+  {
+    "id": "aws-023",
+    "difficulty": "hard",
+    "tags": [
+      "cost-optimization",
+      "s3",
+      "architecture"
+    ],
+    "question": "Your S3 data lake costs $180K/month. The CFO wants a 40% reduction. You have 800TB of data across hot analytics, warm archive, and cold audit layers. Walk me through a cost reduction strategy without breaking existing pipelines.",
+    "answer": "$180K/month for 800TB signals a mix of storage class misuse, request cost waste, and data growth without lifecycle rules. Audit all four cost categories before cutting anything.\n\n**Step 1: Decompose the bill**\n```bash\n# Use AWS Cost Explorer grouped by S3 usage type\n# Categories to check:\n# - TimedStorage-ByteHrs (storage per class)\n# - Requests-Tier1 (PUT/COPY/POST/LIST) — often shockingly high\n# - Requests-Tier2 (GET/HEAD)\n# - DataTransfer-Out-Bytes\n# - EarlyDelete charges (Glacier moved before minimum duration)\n```\n\n**Step 2: Storage class optimization (typically 40-60% of S3 cost)**\n\n| Layer | Current wrong class | Right class | Saving |\n|---|---|---|---|\n| Hot analytics (queried daily) | STANDARD | STANDARD (keep) | — |\n| Warm (queried monthly) | STANDARD | STANDARD-IA | ~45% |\n| Cold audit (queried < quarterly) | STANDARD | Glacier Instant Retrieval | ~68% |\n| Frozen (never queried, compliance only) | STANDARD | Glacier Deep Archive | ~95% |\n\n```json\n// S3 Lifecycle rule — apply per prefix, not bucket-wide\n{\n  \"Rules\": [{\n    \"Filter\": {\"Prefix\": \"raw/\"},\n    \"Transitions\": [\n      {\"Days\": 30, \"StorageClass\": \"STANDARD_IA\"},\n      {\"Days\": 90, \"StorageClass\": \"GLACIER_IR\"},\n      {\"Days\": 365, \"StorageClass\": \"DEEP_ARCHIVE\"}\n    ],\n    \"Status\": \"Enabled\"\n  }]\n}\n```\n\n**Step 3: Request cost reduction**\nSmall files are the silent killer. 10M files × 1 LIST/day = 10M Tier-1 requests/day × $0.005/1000 = $1,500/day.\n- Run Delta/Parquet OPTIMIZE to compact small files\n- Use S3 Inventory instead of LIST operations for metadata queries\n- Cache S3 metadata in Glue Data Catalog instead of listing at runtime\n\n**Step 4: Data transfer cost**\n- Move compute into the same region as S3 (free intra-region)\n- Use VPC endpoints for S3 to eliminate NAT Gateway data transfer charges\n- Enable S3 Transfer Acceleration only where needed — it adds cost\n\n**Step 5: Measure before and after**\nApply lifecycle rules to one prefix, wait 30 days, measure the cost change before rolling out bucket-wide. Early Delete charges on Glacier (minimum 90 days) will appear if data is deleted before minimum duration — model this before migrating.\n\n**Expected outcome:** storage class migration alone on warm/cold data typically achieves 35-50% cost reduction. Request cost fixes add another 10-15%."
+  },
+  {
+    "id": "aws-024",
+    "difficulty": "hard",
+    "tags": [
+      "multi-account",
+      "organizations",
+      "architecture"
+    ],
+    "question": "Design a multi-account AWS data platform for a company with 5 business units, strict data isolation requirements, shared governance tooling, and a centralized data team. What's your account structure, and how do you handle cross-account data access without duplicating data?",
+    "answer": "This is a Landing Zone design problem. The wrong answer is one account per environment. The right answer uses AWS Organizations with a purpose-built account structure.\n\n**Account structure:**\n```\nManagement Account (billing, SCPs only — no workloads)\n├── Security OU\n│   ├── Log Archive Account (centralized CloudTrail, Config)\n│   └── Security Tooling Account (GuardDuty, Security Hub aggregator)\n├── Infrastructure OU\n│   └── Shared Services Account (Transit Gateway, DNS, OIDC providers)\n├── Data Platform OU\n│   ├── Data Governance Account (Lake Formation admin, Glue Catalog)\n│   └── Data Platform Prod Account (Databricks, EMR, Airflow)\n└── Business Unit OUs (one OU per BU)\n    ├── BU-A Dev / BU-A Prod\n    ├── BU-B Dev / BU-B Prod\n    └── ... (each BU owns its source data S3 buckets)\n```\n\n**Cross-account data access without duplication:**\n\nOption 1: **Lake Formation cross-account grants** (recommended for governed access)\n```bash\n# In the Data Governance Account\naws lakeformation grant-permissions \\\n  --principal DataLakePrincipalIdentifier=arn:aws:iam::BU-A-ACCOUNT:role/analyst \\\n  --permissions SELECT \\\n  --resource '{\"Table\":{\"CatalogId\":\"DATA-PLATFORM-ACCOUNT\",\"DatabaseName\":\"gold\",\"Name\":\"revenue\"}}\n```\nAnalysts in BU-A query data in the platform account via Athena/Databricks — no data copy, governed access.\n\nOption 2: **S3 cross-account bucket policy** (for raw data ingestion)\n```json\n{\n  \"Statement\": [{\n    \"Effect\": \"Allow\",\n    \"Principal\": {\"AWS\": \"arn:aws:iam::DATA-PLATFORM-ACCOUNT:role/ingestion-role\"},\n    \"Action\": [\"s3:GetObject\", \"s3:ListBucket\"],\n    \"Resource\": [\"arn:aws:s3:::bu-a-raw-data\", \"arn:aws:s3:::bu-a-raw-data/*\"]\n  }]\n}\n```\n\n**Service Control Policies (SCPs) for isolation:**\n```json\n// Prevent BU accounts from accessing other BUs' S3 buckets\n{\n  \"Effect\": \"Deny\",\n  \"Action\": \"s3:*\",\n  \"Resource\": \"arn:aws:s3:::bu-b-*\",\n  \"Condition\": {\n    \"StringNotLike\": {\"aws:PrincipalArn\": \"arn:aws:iam::DATA-PLATFORM-ACCOUNT:role/*\"}\n  }\n}\n```\n\n**Centralized governance:**\n- Single Glue Data Catalog in the Data Governance Account, shared via Lake Formation RAM shares\n- All data quality results and lineage stored centrally\n- Tagging strategy enforced by SCPs: every resource must have `bu`, `env`, `data-classification` tags"
+  },
+  {
+    "id": "aws-025",
+    "difficulty": "hard",
+    "tags": [
+      "glue",
+      "catalog",
+      "migration"
+    ],
+    "question": "You're migrating 200 Spark pipelines from a self-managed Hive Metastore to AWS Glue Data Catalog. Halfway through, you discover that Glue has different behavior for partition discovery, schema inference, and SerDe handling. How do you complete the migration without breaking downstream consumers?",
+    "answer": "This migration has three hidden behavioral differences that cause silent failures — not errors.\n\n**Behavioral difference 1: Partition discovery**\n\nHive Metastore: partitions are explicitly registered via `ALTER TABLE ADD PARTITION` or `MSCK REPAIR TABLE`.\nGlue Data Catalog: partitions can be auto-discovered via `EnableHybridMode` and `GetPartitions` calls, but the behavior differs depending on whether you use Glue Crawlers or manual registration.\n\n```python\n# Hive pattern (explicit registration)\nspark.sql(\"MSCK REPAIR TABLE my_table\")\n\n# Glue equivalent — must use Glue API or crawler\nglue.batch_create_partition(\n    DatabaseName='mydb',\n    TableName='my_table',\n    PartitionInputList=[...]\n)\n```\nIf your pipelines call `MSCK REPAIR TABLE` and Glue is the backend, this works but is slow at scale (10K+ partitions). Use Glue's batch partition APIs instead.\n\n**Behavioral difference 2: Schema inference and column ordering**\nGlue Crawlers infer schemas alphabetically by column name. Hive Metastore preserves insertion order. If downstream Spark jobs read columns by position (not by name), column 0 is now different.\n\nFix: \n- Read with explicit column selection, never by position\n- After migration, validate schema column order against the original Hive Metastore for each table\n- Add schema contracts (dbt schema tests or Glue table versions) to detect drift\n\n**Behavioral difference 3: SerDe and input format handling**\nGlue uses its own set of SerDe configurations. A Hive table with `org.apache.hadoop.hive.serde2.OpenCSVSerde` may not have an exact Glue equivalent.\n\n```python\n# Check SerDe after migration\nglue.get_table(DatabaseName='mydb', Name='my_table')['Table']['StorageDescriptor']['SerdeInfo']\n```\n\n**Safe migration pattern:**\n\n1. **Parallel read validation** — for 30 days, run every query against both metastores and compare row counts and checksums\n2. **Feature flag per table** — switch tables individually using a config-driven Spark catalog selector\n3. **Consumer freeze** — notify downstream DAGs of each table migration date; they test against Glue before cutover\n4. **Rollback path** — keep Hive Metastore running for 90 days post-migration; revert individual tables if issues arise\n\n**The migration order matters:**\n- Start with leaf tables (no downstream dependencies)\n- End with shared dimensions and fact tables\n- Never migrate a table and its downstream on the same day"
   }
 ]
