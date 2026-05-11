@@ -11,49 +11,80 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
   <style>
-    /* ── Reset & tokens ─────────────────────────────────────────── */
+    /* ── Reset ─────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ── Design tokens ──────────────────────────────────────────────── */
     :root {
-      --bg: #ffffff;
-      --bg-subtle: #f9f9f9;
-      --bg-hover: #f3f3f3;
-      --border: #e5e5e5;
-      --text: #111111;
-      --text-muted: #666666;
-      --text-faint: #999999;
-      --accent: #0066ff;
-      --accent-bg: #e8f0ff;
-      --easy: #16a34a;
-      --easy-bg: #dcfce7;
-      --medium: #d97706;
-      --medium-bg: #fef3c7;
-      --hard: #dc2626;
-      --hard-bg: #fee2e2;
-      --sidebar-w: 260px;
-      --radius: 6px;
-      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --bg:             #FAF9F6;
+      --bg-card:        #FFFFFF;
+      --bg-subtle:      #F3F1EC;
+      --bg-hover:       #EDEAE3;
+      --border:         #D6D2CA;
+      --border-soft:    #E8E4DC;
+      --shadow-card:    3px 3px 0 #D6D2CA;
+      --shadow-hover:   4px 4px 0 #C4BFB6;
+
+      --text:           #1C1917;
+      --text-muted:     #78716C;
+      --text-faint:     #A8A49C;
+
+      --accent:         #2563EB;
+      --accent-bg:      #DBEAFE;
+      --accent-dark:    #1D4ED8;
+
+      --easy:           #16A34A;
+      --easy-bg:        #DCFCE7;
+      --medium:         #D97706;
+      --medium-bg:      #FEF3C7;
+      --hard:           #DC2626;
+      --hard-bg:        #FEE2E2;
+
+      --icon-blue-bg:   #EFF6FF;
+      --icon-green-bg:  #F0FDF4;
+      --icon-amber-bg:  #FFFBEB;
+      --icon-purple-bg: #F5F3FF;
+
+      --sidebar-w:      264px;
+      --content-max:    1200px;
+      --radius:         10px;
+      --radius-lg:      14px;
+      --radius-pill:    99px;
+
+      --font:      "Comic Sans MS", "Bradley Hand", "Segoe Print", "Chalkboard SE", "Trebuchet MS", sans-serif;
+      --font-ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       --font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
     }
 
+    /* ── Dark mode ──────────────────────────────────────────────────── */
     [data-theme="dark"] {
-      --bg: #111111;
-      --bg-subtle: #1a1a1a;
-      --bg-hover: #222222;
-      --border: #2a2a2a;
-      --text: #eeeeee;
-      --text-muted: #888888;
-      --text-faint: #555555;
-      --accent: #4d9eff;
-      --accent-bg: #0d2040;
-      --easy: #4ade80;
-      --easy-bg: #052e16;
-      --medium: #fbbf24;
-      --medium-bg: #1c1100;
-      --hard: #f87171;
-      --hard-bg: #1f0a0a;
+      --bg:             #1A1917;
+      --bg-card:        #242220;
+      --bg-subtle:      #2C2A27;
+      --bg-hover:       #35322E;
+      --border:         #3C3832;
+      --border-soft:    #302E28;
+      --shadow-card:    3px 3px 0 #111009;
+      --shadow-hover:   4px 4px 0 #111009;
+      --text:           #F5F3EF;
+      --text-muted:     #A09890;
+      --text-faint:     #6A6460;
+      --accent:         #60A5FA;
+      --accent-bg:      #1E3A5F;
+      --accent-dark:    #3B82F6;
+      --easy:           #4ADE80;
+      --easy-bg:        #052E16;
+      --medium:         #FBBF24;
+      --medium-bg:      #2D1F00;
+      --hard:           #F87171;
+      --hard-bg:        #1F0A0A;
+      --icon-blue-bg:   #1E3A5F;
+      --icon-green-bg:  #052E16;
+      --icon-amber-bg:  #2D1F00;
+      --icon-purple-bg: #2D1B69;
     }
 
+    /* ── Base ───────────────────────────────────────────────────────── */
     html, body {
       height: 100%;
       font-family: var(--font);
@@ -63,73 +94,71 @@
       line-height: 1.5;
     }
 
-    /* ── Layout ─────────────────────────────────────────────────── */
+    /* ── App shell ──────────────────────────────────────────────────── */
     #app { display: flex; height: 100vh; overflow: hidden; }
 
+    /* ── Sidebar ────────────────────────────────────────────────────── */
     #sidebar {
       width: var(--sidebar-w);
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
-      border-right: 1px solid var(--border);
+      border-right: 2px solid var(--border);
       background: var(--bg-subtle);
       overflow: hidden;
     }
 
-    #main {
-      flex: 1;
-      overflow-y: auto;
-      padding: 32px 40px;
-    }
-
-    /* ── Sidebar internals ──────────────────────────────────────── */
     #sidebar-header {
-      padding: 16px 14px 10px;
+      padding: 18px 14px 13px;
       border-bottom: 1px solid var(--border);
     }
 
+    #sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 13px;
+    }
+    #sidebar-brand-icon { font-size: 20px; line-height: 1; }
     #sidebar-title {
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--text-faint);
-      margin-bottom: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
       cursor: pointer;
       user-select: none;
     }
     #sidebar-title:hover { color: var(--text-muted); }
 
-    #practice-row {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-    }
+    #practice-row { display: flex; gap: 6px; align-items: center; }
 
     #btn-practice {
       flex: 1;
-      padding: 8px 12px;
+      padding: 9px 10px;
       background: var(--accent);
       color: #fff;
       border: none;
       border-radius: var(--radius);
+      font-family: var(--font);
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 700;
       cursor: pointer;
-      text-align: left;
       display: flex;
       align-items: center;
       gap: 6px;
+      box-shadow: 0 3px 0 var(--accent-dark);
+      transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
     }
-    #btn-practice:hover { opacity: 0.88; }
+    #btn-practice:hover { background: var(--accent-dark); }
+    #btn-practice:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--accent-dark); }
 
     #practice-count {
       width: 48px;
-      padding: 7px 6px;
-      border: 1px solid var(--border);
+      padding: 8px 6px;
+      border: 1.5px solid var(--border);
       border-radius: var(--radius);
-      background: var(--bg);
+      background: var(--bg-card);
       color: var(--text);
+      font-family: var(--font);
       font-size: 13px;
       text-align: center;
       outline: none;
@@ -146,160 +175,321 @@
 
     #search {
       width: 100%;
-      padding: 7px 10px;
-      border: 1px solid var(--border);
+      padding: 8px 10px 8px 32px;
+      border: 1.5px solid var(--border);
       border-radius: var(--radius);
-      background: var(--bg);
+      background: var(--bg-card);
       color: var(--text);
+      font-family: var(--font);
       font-size: 13px;
       outline: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A8A49C' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: 10px center;
+      transition: border-color 0.15s;
     }
     #search:focus { border-color: var(--accent); }
     #search::placeholder { color: var(--text-faint); }
 
-    #cat-list { flex: 1; overflow-y: auto; padding: 6px 0; }
+    #cat-list { flex: 1; overflow-y: auto; padding: 8px 6px; }
 
     .cat-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 14px;
+      gap: 9px;
+      padding: 8px 8px;
       cursor: pointer;
-      border-radius: 0;
-      transition: background 0.1s;
-      border-left: 2px solid transparent;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      transition: background 0.1s, border-color 0.1s;
+      margin-bottom: 2px;
     }
-    .cat-item:hover { background: var(--bg-hover); }
-    .cat-item.active {
-      background: var(--accent-bg);
-      border-left-color: var(--accent);
-    }
+    .cat-item:hover { background: var(--bg-hover); border-color: var(--border-soft); }
+    .cat-item.active { background: var(--accent-bg); border-color: var(--accent); }
+    .cat-item.active .cat-name { color: var(--accent); }
 
-    .cat-icon { font-size: 15px; flex-shrink: 0; }
+    .cat-icon { font-size: 16px; flex-shrink: 0; }
     .cat-info { flex: 1; min-width: 0; }
-    .cat-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cat-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .cat-progress { font-size: 11px; color: var(--text-faint); }
 
     #sidebar-footer {
-      padding: 10px 14px;
+      padding: 10px 14px 13px;
       border-top: 1px solid var(--border);
     }
 
     #btn-theme {
       background: none;
-      border: 1px solid var(--border);
+      border: 1.5px solid var(--border);
       border-radius: var(--radius);
       color: var(--text-muted);
-      padding: 6px 10px;
+      padding: 7px 10px;
+      font-family: var(--font);
       font-size: 12px;
       cursor: pointer;
       width: 100%;
       text-align: left;
+      margin-bottom: 9px;
+      transition: background 0.1s;
     }
     #btn-theme:hover { background: var(--bg-hover); }
 
-    /* ── Hamburger ──────────────────────────────────────────────── */
+    #zero-deps-note {
+      font-family: var(--font-ui);
+      font-size: 10px;
+      color: var(--text-faint);
+      text-align: center;
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Main area ──────────────────────────────────────────────────── */
+    #main { flex: 1; overflow-y: auto; }
+
+    .main-inner {
+      max-width: var(--content-max);
+      margin: 0 auto;
+      padding: 38px 44px;
+    }
+
+    /* ── Hamburger ──────────────────────────────────────────────────── */
     #hamburger {
       display: none;
       position: fixed;
-      top: 12px;
-      left: 12px;
+      top: 12px; left: 12px;
       z-index: 100;
-      background: var(--bg);
-      border: 1px solid var(--border);
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
       border-radius: var(--radius);
-      padding: 6px 9px;
+      padding: 7px 10px;
       font-size: 16px;
       cursor: pointer;
       line-height: 1;
+      box-shadow: var(--shadow-card);
     }
 
     #sidebar-overlay {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.4);
+      background: rgba(0,0,0,0.35);
       z-index: 50;
     }
 
-    /* ── Welcome view ────────────────────────────────────────────── */
-    #view-welcome {}
-
+    /* ── Welcome view ───────────────────────────────────────────────── */
     .welcome-heading {
-      font-size: 22px;
-      font-weight: 600;
+      font-size: 28px;
+      font-weight: 700;
       margin-bottom: 4px;
     }
     .welcome-sub {
       color: var(--text-muted);
-      margin-bottom: 28px;
+      margin-bottom: 34px;
+      font-size: 14px;
     }
 
+    /* ── Stat cards ─────────────────────────────────────────────────── */
     .stats-row {
-      display: flex;
-      gap: 16px;
-      margin-bottom: 32px;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 14px;
+      margin-bottom: 42px;
     }
 
     .stat-card {
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px 20px;
-      flex: 1;
-      min-width: 120px;
+      background: var(--bg-card);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      box-shadow: var(--shadow-card);
+      transition: transform 0.15s, box-shadow 0.15s;
     }
-    .stat-value { font-size: 28px; font-weight: 600; }
-    .stat-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .stat-card:hover {
+      transform: translateY(-2px) translateX(-1px);
+      box-shadow: var(--shadow-hover);
+    }
 
-    .section-label {
+    .stat-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+      border: 1.5px solid rgba(0,0,0,0.05);
+    }
+    .stat-icon.blue   { background: var(--icon-blue-bg); }
+    .stat-icon.green  { background: var(--icon-green-bg); }
+    .stat-icon.amber  { background: var(--icon-amber-bg); }
+    .stat-icon.purple { background: var(--icon-purple-bg); }
+
+    .stat-body { flex: 1; min-width: 0; }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 5px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+
+    .stat-helper {
+      font-family: var(--font-ui);
       font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
       color: var(--text-faint);
-      margin-bottom: 12px;
     }
 
-    .progress-cards { display: flex; flex-direction: column; gap: 10px; }
+    .stat-mini-bar {
+      height: 4px;
+      background: var(--bg-subtle);
+      border-radius: 2px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .stat-mini-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    /* ── Section header ─────────────────────────────────────────────── */
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .section-label { font-size: 14px; font-weight: 700; color: var(--text); }
+    .section-count {
+      font-family: var(--font-ui);
+      font-size: 11px;
+      color: var(--text-faint);
+    }
+
+    /* ── Progress cards ─────────────────────────────────────────────── */
+    .progress-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(370px, 1fr));
+      gap: 10px;
+    }
 
     .progress-card {
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
+      background: var(--bg-card);
+      border: 1.5px solid var(--border-soft);
+      border-radius: var(--radius-lg);
       padding: 14px 16px;
       cursor: pointer;
-      transition: background 0.1s, border-color 0.1s;
+      transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+      box-shadow: 2px 2px 0 var(--border-soft);
     }
     .progress-card:hover {
-      background: var(--bg-hover);
+      transform: translateY(-2px) translateX(-1px);
+      box-shadow: 3px 3px 0 var(--border);
       border-color: var(--accent);
     }
-    .progress-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .progress-card-name { font-weight: 500; }
-    .progress-card-count { font-size: 12px; color: var(--text-muted); }
-    .progress-bar-bg { height: 4px; background: var(--border); border-radius: 2px; }
-    .progress-bar-fill { height: 4px; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
 
-    /* ── Category view ───────────────────────────────────────────── */
-    .cat-view-header { margin-bottom: 20px; }
-    .cat-view-title { font-size: 20px; font-weight: 600; }
-    .cat-view-meta { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+    .progress-card-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
 
-    .question-list { display: flex; flex-direction: column; gap: 1px; }
+    .progress-card-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-soft);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .progress-card-info { flex: 1; min-width: 0; }
+
+    .progress-card-name {
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .progress-card-sub {
+      font-family: var(--font-ui);
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-top: 2px;
+    }
+
+    .progress-card-right {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+
+    .progress-card-count { font-size: 16px; font-weight: 700; color: var(--text); }
+    .progress-card-total { font-size: 12px; color: var(--text-faint); }
+
+    .progress-card-chevron {
+      font-family: var(--font-ui);
+      font-size: 20px;
+      color: var(--text-faint);
+      margin-left: 6px;
+      line-height: 1;
+    }
+
+    .progress-bar-bg {
+      height: 6px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-soft);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    /* ── Category view ──────────────────────────────────────────────── */
+    .cat-view-header { margin-bottom: 22px; }
+    .cat-view-title { font-size: 22px; font-weight: 700; }
+    .cat-view-meta { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    .question-list { display: flex; flex-direction: column; gap: 6px; }
 
     .q-row {
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 12px 14px;
-      border: 1px solid var(--border);
+      background: var(--bg-card);
+      border: 1.5px solid var(--border-soft);
       border-radius: var(--radius);
       cursor: pointer;
-      background: var(--bg);
-      margin-bottom: 6px;
-      transition: background 0.1s;
+      transition: background 0.1s, border-color 0.1s, transform 0.1s;
     }
-    .q-row:hover { background: var(--bg-hover); }
+    .q-row:hover {
+      background: var(--bg-hover);
+      border-color: var(--border);
+      transform: translateX(3px);
+    }
 
     .status-dot {
       width: 8px;
@@ -307,232 +497,290 @@
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .status-dot.unseen { background: var(--border); border: 1px solid var(--text-faint); }
-    .status-dot.shaky { background: var(--medium); }
+    .status-dot.unseen   { background: var(--border); border: 1px solid var(--text-faint); }
+    .status-dot.shaky    { background: var(--medium); }
     .status-dot.mastered { background: var(--easy); }
 
     .diff-badge {
+      font-family: var(--font-ui);
       font-size: 10px;
-      font-weight: 600;
-      padding: 2px 7px;
-      border-radius: 99px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
       flex-shrink: 0;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
-    .diff-badge.easy { color: var(--easy); background: var(--easy-bg); }
+    .diff-badge.easy   { color: var(--easy);   background: var(--easy-bg); }
     .diff-badge.medium { color: var(--medium); background: var(--medium-bg); }
-    .diff-badge.hard { color: var(--hard); background: var(--hard-bg); }
+    .diff-badge.hard   { color: var(--hard);   background: var(--hard-bg); }
 
     .q-row-body { flex: 1; min-width: 0; }
     .q-text { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .q-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 4px; }
 
     .tag-pill {
+      font-family: var(--font-ui);
       font-size: 10px;
-      padding: 1px 7px;
-      border-radius: 99px;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
       background: var(--bg-subtle);
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-soft);
       color: var(--text-muted);
     }
 
-    /* ── Question detail view ────────────────────────────────────── */
+    /* ── Question detail ────────────────────────────────────────────── */
+    .detail-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
     .detail-back {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
       font-size: 13px;
       color: var(--text-muted);
       cursor: pointer;
-      margin-bottom: 20px;
       padding: 4px 0;
     }
     .detail-back:hover { color: var(--text); }
 
-    .detail-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+    .detail-nav-arrows { display: flex; gap: 6px; }
+
+    .btn-nav-q {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 12px;
+      padding: 6px 12px;
+      cursor: pointer;
+      box-shadow: 1px 1px 0 var(--border);
+      transition: background 0.1s;
+    }
+    .btn-nav-q:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+    .btn-nav-q:disabled { opacity: 0.3; cursor: default; }
+
+    .detail-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 
     .detail-question {
-      font-size: 18px;
-      font-weight: 600;
-      line-height: 1.4;
-      margin-bottom: 20px;
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.45;
+      margin-bottom: 24px;
+      max-width: 780px;
     }
 
     #btn-show-answer {
-      padding: 9px 18px;
+      padding: 10px 22px;
       background: var(--bg-subtle);
-      border: 1px solid var(--border);
+      border: 2px solid var(--border);
       border-radius: var(--radius);
-      font-size: 13px;
-      font-weight: 500;
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 700;
       cursor: pointer;
       color: var(--text);
+      box-shadow: var(--shadow-card);
+      transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
     }
-    #btn-show-answer:hover { background: var(--bg-hover); }
+    #btn-show-answer:hover {
+      background: var(--bg-hover);
+      transform: translateY(1px) translateX(1px);
+      box-shadow: 1px 1px 0 var(--border);
+    }
 
-    #answer-section { margin-top: 24px; }
+    #answer-section { margin-top: 28px; }
 
     .answer-divider {
-      height: 1px;
-      background: var(--border);
-      margin-bottom: 20px;
+      height: 2px;
+      background: var(--border-soft);
+      margin-bottom: 24px;
+      border-radius: 1px;
     }
 
     .answer-body {
+      font-family: var(--font-ui);
       font-size: 14px;
-      line-height: 1.7;
+      line-height: 1.75;
       color: var(--text);
+      max-width: 780px;
     }
 
-    /* markdown rendering */
     .answer-body h1, .answer-body h2, .answer-body h3 {
-      margin: 18px 0 8px;
-      font-weight: 600;
+      font-family: var(--font);
+      margin: 20px 0 8px;
+      font-weight: 700;
     }
-    .answer-body h1 { font-size: 17px; }
-    .answer-body h2 { font-size: 15px; }
+    .answer-body h1 { font-size: 18px; }
+    .answer-body h2 { font-size: 16px; }
     .answer-body h3 { font-size: 14px; }
     .answer-body p { margin-bottom: 12px; }
-    .answer-body ul, .answer-body ol { padding-left: 20px; margin-bottom: 12px; }
-    .answer-body li { margin-bottom: 4px; }
-    .answer-body strong { font-weight: 600; }
+    .answer-body ul, .answer-body ol { padding-left: 22px; margin-bottom: 12px; }
+    .answer-body li { margin-bottom: 5px; }
+    .answer-body strong { font-weight: 700; }
     .answer-body code {
       font-family: var(--font-mono);
       font-size: 12px;
       background: var(--bg-subtle);
       border: 1px solid var(--border);
       padding: 1px 5px;
-      border-radius: 3px;
+      border-radius: 4px;
     }
     .answer-body pre {
       background: var(--bg-subtle);
-      border: 1px solid var(--border);
+      border: 1.5px solid var(--border);
       border-radius: var(--radius);
-      padding: 14px 16px;
+      padding: 16px 18px;
       overflow-x: auto;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
     }
     .answer-body pre code {
       background: none;
       border: none;
       padding: 0;
-      font-size: 12px;
+      font-size: 12.5px;
       line-height: 1.6;
     }
 
     .rate-buttons {
       display: flex;
       gap: 10px;
-      margin-top: 24px;
+      margin-top: 28px;
       flex-wrap: wrap;
     }
 
     .rate-btn {
-      padding: 9px 18px;
-      border: 1px solid var(--border);
+      padding: 10px 20px;
+      border: 2px solid var(--border);
       border-radius: var(--radius);
+      font-family: var(--font);
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 700;
       cursor: pointer;
-      background: var(--bg);
+      background: var(--bg-card);
       color: var(--text);
-      transition: background 0.1s;
+      box-shadow: 2px 2px 0 var(--border);
+      transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
     }
-    .rate-btn:hover { background: var(--bg-hover); }
-    .rate-btn.shaky { border-color: var(--medium); color: var(--medium); }
-    .rate-btn.shaky:hover { background: var(--medium-bg); }
-    .rate-btn.gotit { border-color: var(--accent); color: var(--accent); }
-    .rate-btn.gotit:hover { background: var(--accent-bg); }
-    .rate-btn.mastered { border-color: var(--easy); color: var(--easy); }
+    .rate-btn:hover { transform: translateY(1px) translateX(1px); box-shadow: 1px 1px 0 var(--border); }
+
+    .rate-btn.shaky    { border-color: var(--medium); color: var(--medium); box-shadow: 2px 2px 0 var(--medium-bg); }
+    .rate-btn.shaky:hover    { background: var(--medium-bg); }
+    .rate-btn.gotit    { border-color: var(--accent);  color: var(--accent);  box-shadow: 2px 2px 0 var(--accent-bg); }
+    .rate-btn.gotit:hover    { background: var(--accent-bg); }
+    .rate-btn.mastered { border-color: var(--easy);   color: var(--easy);   box-shadow: 2px 2px 0 var(--easy-bg); }
     .rate-btn.mastered:hover { background: var(--easy-bg); }
 
-    /* ── Practice mode ───────────────────────────────────────────── */
+    /* ── Practice mode ──────────────────────────────────────────────── */
     .practice-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 28px;
     }
-    .practice-label {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--text-faint);
-    }
+    .practice-label { font-size: 14px; font-weight: 700; color: var(--text); }
+
     #btn-exit-practice {
+      font-family: var(--font);
       font-size: 12px;
       color: var(--text-muted);
-      background: none;
-      border: 1px solid var(--border);
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
       border-radius: var(--radius);
-      padding: 5px 10px;
+      padding: 6px 12px;
       cursor: pointer;
+      box-shadow: 1px 1px 0 var(--border);
+      transition: background 0.1s;
     }
     #btn-exit-practice:hover { background: var(--bg-hover); }
 
     .practice-done {
       text-align: center;
-      padding: 60px 20px;
+      padding: 80px 20px;
       color: var(--text-muted);
     }
-    .practice-done-emoji { font-size: 40px; margin-bottom: 12px; }
-    .practice-done h2 { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+    .practice-done-emoji { font-size: 48px; margin-bottom: 14px; }
+    .practice-done h2 { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+    .practice-done p { font-family: var(--font-ui); font-size: 14px; }
 
     #btn-next-question {
-      margin-top: 24px;
-      padding: 9px 18px;
+      margin-top: 28px;
+      padding: 10px 22px;
       background: var(--accent);
       color: #fff;
       border: none;
       border-radius: var(--radius);
-      font-size: 13px;
-      font-weight: 500;
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 700;
       cursor: pointer;
+      box-shadow: 0 3px 0 var(--accent-dark);
+      transition: transform 0.1s, box-shadow 0.1s;
     }
-    #btn-next-question:hover { opacity: 0.88; }
+    #btn-next-question:hover { transform: translateY(1px); box-shadow: 0 2px 0 var(--accent-dark); }
+    #btn-next-question:active { transform: translateY(3px); box-shadow: none; }
 
-    /* ── Search results ──────────────────────────────────────────── */
+    /* ── Search results ─────────────────────────────────────────────── */
     .search-group-label {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+      font-size: 12px;
+      font-weight: 700;
       color: var(--text-faint);
-      margin: 18px 0 8px;
+      margin: 20px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border-soft);
     }
     .search-group-label:first-child { margin-top: 0; }
 
     .search-empty {
+      font-family: var(--font-ui);
       color: var(--text-muted);
-      font-size: 13px;
-      padding: 20px 0;
+      font-size: 14px;
+      padding: 28px 0;
     }
 
-    /* ── Utility ─────────────────────────────────────────────────── */
+    /* ── Utility ────────────────────────────────────────────────────── */
     .hidden { display: none !important; }
 
-    /* ── Mobile ──────────────────────────────────────────────────── */
+    /* ── Scrollbars ─────────────────────────────────────────────────── */
+    #cat-list::-webkit-scrollbar,
+    #main::-webkit-scrollbar { width: 4px; }
+    #cat-list::-webkit-scrollbar-track,
+    #main::-webkit-scrollbar-track { background: transparent; }
+    #cat-list::-webkit-scrollbar-thumb,
+    #main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Responsive ─────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .progress-cards { grid-template-columns: 1fr; }
+    }
+
     @media (max-width: 680px) {
       #hamburger { display: block; }
 
       #sidebar {
         position: fixed;
-        left: 0;
-        top: 0;
-        bottom: 0;
+        left: 0; top: 0; bottom: 0;
         z-index: 60;
         transform: translateX(-100%);
-        transition: transform 0.2s ease;
+        transition: transform 0.22s ease;
         width: var(--sidebar-w);
       }
       #sidebar.open { transform: translateX(0); }
       #sidebar-overlay.open { display: block; }
 
-      #main { padding: 20px 18px; padding-top: 52px; }
-
+      .main-inner { padding: 20px 18px; padding-top: 58px; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
       .rate-buttons { gap: 8px; }
       .rate-btn { flex: 1; text-align: center; padding: 9px 10px; }
+    }
+
+    @media (max-width: 420px) {
+      .stats-row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -544,7 +792,10 @@
 <div id="app">
   <nav id="sidebar">
     <div id="sidebar-header">
-      <div id="sidebar-title">Interview Prep</div>
+      <div id="sidebar-brand">
+        <span id="sidebar-brand-icon">✏️</span>
+        <span id="sidebar-title">Interview Prep</span>
+      </div>
       <div id="practice-row">
         <button id="btn-practice">⚡ Practice random</button>
         <input id="practice-count" type="number" min="1" max="999" value="10" title="Number of questions" />
@@ -553,61 +804,75 @@
     <div id="search-wrap">
       <input id="search" type="search" placeholder="Search questions…" autocomplete="off" />
     </div>
-    <div id="cat-list"><!-- filled by JS --></div>
+    <div id="cat-list"></div>
     <div id="sidebar-footer">
-      <button id="btn-theme"><!-- filled by JS --></button>
+      <button id="btn-theme"></button>
+      <div id="zero-deps-note">Zero dependencies · Pure HTML/CSS/JS</div>
     </div>
   </nav>
 
   <main id="main">
-    <!-- Welcome -->
-    <div id="view-welcome">
-      <div class="welcome-heading">Welcome back 👋</div>
-      <div class="welcome-sub">Pick a category or start a practice session.</div>
-      <div class="stats-row" id="stats-row"><!-- filled --></div>
-      <div class="section-label">Progress by category</div>
-      <div class="progress-cards" id="progress-cards"><!-- filled --></div>
-    </div>
+    <div class="main-inner">
 
-    <!-- Category -->
-    <div id="view-category" class="hidden">
-      <div class="cat-view-header">
-        <div class="cat-view-title" id="cat-title"></div>
-        <div class="cat-view-meta" id="cat-meta"></div>
+      <!-- Welcome -->
+      <div id="view-welcome">
+        <div class="welcome-heading">Welcome back ✦</div>
+        <div class="welcome-sub">Pick a category or start a practice session.</div>
+        <div class="stats-row" id="stats-row"></div>
+        <div class="section-header">
+          <span class="section-label">Progress by category</span>
+          <span class="section-count" id="section-cat-count"></span>
+        </div>
+        <div class="progress-cards" id="progress-cards"></div>
       </div>
-      <div class="question-list" id="question-list"><!-- filled --></div>
-    </div>
 
-    <!-- Question detail -->
-    <div id="view-detail" class="hidden">
-      <div class="detail-back" id="btn-back">← Back</div>
-      <div class="detail-meta" id="detail-meta"><!-- filled --></div>
-      <div class="detail-question" id="detail-question"></div>
-      <button id="btn-show-answer">Show answer</button>
-      <div id="answer-section" class="hidden">
-        <div class="answer-divider"></div>
-        <div class="answer-body" id="answer-body"><!-- filled --></div>
-        <div class="rate-buttons">
-          <button class="rate-btn shaky" data-status="shaky">Still shaky</button>
-          <button class="rate-btn gotit" data-status="gotit">Got it</button>
-          <button class="rate-btn mastered" data-status="mastered">Mastered ✓</button>
+      <!-- Category -->
+      <div id="view-category" class="hidden">
+        <div class="cat-view-header">
+          <div class="cat-view-title" id="cat-title"></div>
+          <div class="cat-view-meta" id="cat-meta"></div>
+        </div>
+        <div class="question-list" id="question-list"></div>
+      </div>
+
+      <!-- Question detail -->
+      <div id="view-detail" class="hidden">
+        <div class="detail-nav">
+          <div class="detail-back" id="btn-back">← Back</div>
+          <div class="detail-nav-arrows">
+            <button class="btn-nav-q" id="btn-prev-q">← Prev</button>
+            <button class="btn-nav-q" id="btn-next-q">Next →</button>
+          </div>
+        </div>
+        <div class="detail-meta" id="detail-meta"></div>
+        <div class="detail-question" id="detail-question"></div>
+        <button id="btn-show-answer">Reveal answer</button>
+        <div id="answer-section" class="hidden">
+          <div class="answer-divider"></div>
+          <div class="answer-body" id="answer-body"></div>
+          <div class="rate-buttons">
+            <button class="rate-btn shaky" data-status="shaky">Still shaky</button>
+            <button class="rate-btn gotit" data-status="gotit">Got it</button>
+            <button class="rate-btn mastered" data-status="mastered">Mastered ✓</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Practice -->
-    <div id="view-practice" class="hidden">
-      <div class="practice-header">
-        <span class="practice-label">Practice — <span id="practice-progress"></span></span>
-        <button id="btn-exit-practice">Exit</button>
+      <!-- Practice -->
+      <div id="view-practice" class="hidden">
+        <div class="practice-header">
+          <span class="practice-label">Practice — <span id="practice-progress"></span></span>
+          <button id="btn-exit-practice">Exit</button>
+        </div>
+        <div id="practice-body"></div>
       </div>
-      <div id="practice-body"><!-- filled --></div>
-    </div>
 
-    <!-- Search results -->
-    <div id="view-search" class="hidden">
-      <div class="section-label" style="margin-bottom:14px">Search results</div>
-      <div id="search-results"><!-- filled --></div>
+      <!-- Search results -->
+      <div id="view-search" class="hidden">
+        <div class="section-label" style="margin-bottom:16px">Search results</div>
+        <div id="search-results"></div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -637,15 +902,14 @@ function saveTheme(t) { const s = loadStore(); s.theme = t; saveStore(s); }
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   document.getElementById('hljs-light').disabled = (theme === 'dark');
-  document.getElementById('hljs-dark').disabled = (theme !== 'dark');
+  document.getElementById('hljs-dark').disabled  = (theme !== 'dark');
   document.getElementById('btn-theme').textContent = theme === 'dark' ? '☀ Light mode' : '☾ Dark mode';
 }
 
 function initTheme() {
   const saved = getTheme();
   if (saved) { applyTheme(saved); return; }
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  applyTheme(prefersDark ? 'dark' : 'light');
+  applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 }
 
 document.getElementById('sidebar-title').addEventListener('click', () => {
@@ -657,16 +921,15 @@ document.getElementById('sidebar-title').addEventListener('click', () => {
 });
 
 document.getElementById('btn-theme').addEventListener('click', () => {
-  const current = document.documentElement.getAttribute('data-theme');
-  const next = current === 'dark' ? 'light' : 'dark';
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   applyTheme(next);
   saveTheme(next);
 });
 
 // ── Data loading ───────────────────────────────────────────────────
-let categories = [];
-let questions = {}; // { categoryId: [questions] }
-let allQuestions = []; // flat
+let categories  = [];
+let questions   = {};
+let allQuestions = [];
 
 async function fetchJSON(path) {
   const r = await fetch(path);
@@ -691,22 +954,24 @@ async function loadData() {
 let currentView = 'welcome';
 let currentCatId = null;
 let currentQuestion = null;
+let currentQuestionList = [];
+let currentQuestionIndex = -1;
 
 // ── Views ──────────────────────────────────────────────────────────
 function showView(name) {
-  ['welcome', 'category', 'detail', 'practice', 'search'].forEach(v => {
+  ['welcome','category','detail','practice','search'].forEach(v => {
     document.getElementById(`view-${v}`).classList.toggle('hidden', v !== name);
   });
   currentView = name;
 }
 
-// ── Sidebar category list ──────────────────────────────────────────
+// ── Sidebar ────────────────────────────────────────────────────────
 function renderSidebar() {
   const progress = getProgress();
-  const catList = document.getElementById('cat-list');
+  const catList  = document.getElementById('cat-list');
   catList.innerHTML = '';
   categories.forEach(cat => {
-    const qs = questions[cat.id] || [];
+    const qs      = questions[cat.id] || [];
     const mastered = qs.filter(q => progress[q.id] === 'mastered').length;
     const el = document.createElement('div');
     el.className = 'cat-item' + (currentCatId === cat.id ? ' active' : '');
@@ -724,28 +989,72 @@ function renderSidebar() {
 
 // ── Welcome view ───────────────────────────────────────────────────
 function renderWelcome() {
-  const progress = getProgress();
-  const total = allQuestions.length;
-  const mastered = allQuestions.filter(q => progress[q.id] === 'mastered').length;
-  const seen = allQuestions.filter(q => progress[q.id]).length;
+  const progress    = getProgress();
+  const total       = allQuestions.length;
+  const mastered    = allQuestions.filter(q => progress[q.id] === 'mastered').length;
+  const attempted   = allQuestions.filter(q => progress[q.id]).length;
+  const overallPct  = total ? Math.round((mastered / total) * 100) : 0;
+  const masteredPct = total ? ((mastered  / total) * 100).toFixed(1) : '0.0';
+  const attemptedPct= total ? ((attempted / total) * 100).toFixed(1) : '0.0';
+
+  const activeCats = categories.filter(c => (questions[c.id] || []).length > 0).length;
+  const countEl = document.getElementById('section-cat-count');
+  if (countEl) countEl.textContent = `${activeCats} categories`;
 
   document.getElementById('stats-row').innerHTML = `
-    <div class="stat-card"><div class="stat-value">${total}</div><div class="stat-label">Total questions</div></div>
-    <div class="stat-card"><div class="stat-value">${mastered}</div><div class="stat-label">Mastered</div></div>
-    <div class="stat-card"><div class="stat-value">${seen}</div><div class="stat-label">Attempted</div></div>`;
+    <div class="stat-card">
+      <div class="stat-icon blue">📚</div>
+      <div class="stat-body">
+        <div class="stat-value">${total}</div>
+        <div class="stat-label">Total questions</div>
+        <div class="stat-helper">&nbsp;</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green">🏆</div>
+      <div class="stat-body">
+        <div class="stat-value">${mastered}</div>
+        <div class="stat-label">Mastered</div>
+        <div class="stat-helper">${mastered > 0 ? masteredPct + '% of all questions' : 'Keep going!'}</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon amber">👁</div>
+      <div class="stat-body">
+        <div class="stat-value">${attempted}</div>
+        <div class="stat-label">Attempted</div>
+        <div class="stat-helper">${attempted > 0 ? attemptedPct + '% of all questions' : 'Start practicing!'}</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple">📈</div>
+      <div class="stat-body">
+        <div class="stat-value">${overallPct}%</div>
+        <div class="stat-label">Overall progress</div>
+        <div class="stat-mini-bar"><div class="stat-mini-bar-fill" style="width:${overallPct}%"></div></div>
+      </div>
+    </div>`;
 
   const cards = document.getElementById('progress-cards');
   cards.innerHTML = '';
   categories.forEach(cat => {
     const qs = questions[cat.id] || [];
-    const m = qs.filter(q => progress[q.id] === 'mastered').length;
-    const pct = qs.length ? Math.round((m / qs.length) * 100) : 0;
+    if (qs.length === 0) return;
+    const m   = qs.filter(q => progress[q.id] === 'mastered').length;
+    const pct = Math.round((m / qs.length) * 100);
     const card = document.createElement('div');
     card.className = 'progress-card';
     card.innerHTML = `
-      <div class="progress-card-header">
-        <span class="progress-card-name">${cat.icon} ${cat.name}</span>
-        <span class="progress-card-count">${m} / ${qs.length}</span>
+      <div class="progress-card-top">
+        <span class="progress-card-icon">${cat.icon}</span>
+        <div class="progress-card-info">
+          <div class="progress-card-name">${cat.name}</div>
+          <div class="progress-card-sub">${m} mastered · ${qs.length} total</div>
+        </div>
+        <div class="progress-card-right">
+          <span class="progress-card-count">${m}<span class="progress-card-total">/${qs.length}</span></span>
+          <span class="progress-card-chevron">›</span>
+        </div>
       </div>
       <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%"></div></div>`;
     card.addEventListener('click', () => openCategory(cat.id));
@@ -764,8 +1073,8 @@ function openCategory(catId) {
 }
 
 function renderCategoryView(catId) {
-  const cat = categories.find(c => c.id === catId);
-  const qs = questions[catId] || [];
+  const cat      = categories.find(c => c.id === catId);
+  const qs       = questions[catId] || [];
   const progress = getProgress();
 
   document.getElementById('cat-title').textContent = `${cat.icon} ${cat.name}`;
@@ -785,17 +1094,25 @@ function renderCategoryView(catId) {
         <div class="q-text">${escHtml(q.question)}</div>
         <div class="q-tags">${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}</div>
       </div>`;
-    el.addEventListener('click', () => openQuestion(q, catId, 'category'));
+    el.addEventListener('click', () => openQuestion(q, catId, 'category', qs));
     list.appendChild(el);
   });
 }
 
-// ── Question detail view ───────────────────────────────────────────
-function openQuestion(q, catId, backView) {
-  currentQuestion = { q, catId, backView };
+// ── Question detail ────────────────────────────────────────────────
+function openQuestion(q, catId, backView, questionList) {
+  currentQuestion      = { q, catId, backView };
+  currentQuestionList  = questionList || [];
+  currentQuestionIndex = currentQuestionList.findIndex(x => x.id === q.id);
+
+  const prevBtn = document.getElementById('btn-prev-q');
+  const nextBtn = document.getElementById('btn-next-q');
+  prevBtn.disabled = currentQuestionIndex <= 0;
+  nextBtn.disabled = currentQuestionIndex < 0 || currentQuestionIndex >= currentQuestionList.length - 1;
+
   const progress = getProgress();
-  const status = progress[q.id] || 'unseen';
-  const cat = categories.find(c => c.id === catId);
+  const status   = progress[q.id] || 'unseen';
+  const cat      = categories.find(c => c.id === catId);
 
   document.getElementById('detail-meta').innerHTML = `
     <span class="diff-badge ${q.difficulty}">${q.difficulty}</span>
@@ -811,7 +1128,7 @@ function openQuestion(q, catId, backView) {
 
   document.getElementById('btn-back').onclick = () => {
     if (backView === 'category') { renderCategoryView(catId); showView('category'); }
-    else if (backView === 'practice') { startPractice(); }
+    else if (backView === 'practice') { renderPracticeList(); showView('practice'); }
     else { showView('welcome'); }
     renderSidebar();
   };
@@ -819,6 +1136,18 @@ function openQuestion(q, catId, backView) {
   showView('detail');
   closeSidebar();
 }
+
+document.getElementById('btn-prev-q').addEventListener('click', () => {
+  if (currentQuestionIndex <= 0) return;
+  const q = currentQuestionList[currentQuestionIndex - 1];
+  openQuestion(q, q._catId, currentQuestion.backView, currentQuestionList);
+});
+
+document.getElementById('btn-next-q').addEventListener('click', () => {
+  if (currentQuestionIndex >= currentQuestionList.length - 1) return;
+  const q = currentQuestionList[currentQuestionIndex + 1];
+  openQuestion(q, q._catId, currentQuestion.backView, currentQuestionList);
+});
 
 document.getElementById('btn-show-answer').addEventListener('click', () => {
   if (!currentQuestion) return;
@@ -836,16 +1165,13 @@ document.querySelectorAll('.rate-btn').forEach(btn => {
     const { q, catId, backView } = currentQuestion;
     const raw = btn.dataset.status;
     setProgress(q.id, raw === 'mastered' ? 'mastered' : 'shaky');
-
     renderSidebar();
     if (backView === 'practice') {
-      startPractice();
+      renderPracticeList(); showView('practice');
     } else if (backView === 'category') {
-      renderCategoryView(catId);
-      showView('category');
+      renderCategoryView(catId); showView('category');
     } else {
-      renderWelcome();
-      showView('welcome');
+      renderWelcome(); showView('welcome');
     }
   });
 });
@@ -856,20 +1182,16 @@ function statusLabel(s) {
 
 // ── Practice mode ──────────────────────────────────────────────────
 let practiceQueue = [];
-let practiceQueueIndex = 0;
 
 function startPractice() {
   const progress = getProgress();
-  const pool = allQuestions.filter(q => progress[q.id] !== 'mastered');
-
-  showView('practice');
-  closeSidebar();
-
-  const body = document.getElementById('practice-body');
+  const pool     = allQuestions.filter(q => progress[q.id] !== 'mastered');
 
   if (pool.length === 0) {
+    showView('practice');
+    closeSidebar();
     document.getElementById('practice-progress').textContent = '';
-    body.innerHTML = `
+    document.getElementById('practice-body').innerHTML = `
       <div class="practice-done">
         <div class="practice-done-emoji">🎉</div>
         <h2>Nothing left to practice</h2>
@@ -879,70 +1201,54 @@ function startPractice() {
   }
 
   const n = Math.min(Math.max(parseInt(document.getElementById('practice-count').value, 10) || 10, 1), pool.length);
-  const shuffled = pool.slice().sort(() => Math.random() - 0.5);
-  practiceQueue = shuffled.slice(0, n);
-  practiceQueueIndex = 0;
-
-  showPracticeQuestion();
+  practiceQueue = pool.slice().sort(() => Math.random() - 0.5).slice(0, n);
+  renderPracticeList();
+  showView('practice');
+  closeSidebar();
 }
 
-function showPracticeQuestion() {
-  const body = document.getElementById('practice-body');
+function renderPracticeList() {
   const progress = getProgress();
+  const answered  = practiceQueue.filter(q => progress[q.id]).length;
+  document.getElementById('practice-progress').textContent = `${answered} / ${practiceQueue.length} answered`;
 
-  if (practiceQueueIndex >= practiceQueue.length) {
-    document.getElementById('practice-progress').textContent = `${practiceQueue.length} / ${practiceQueue.length}`;
-    body.innerHTML = `
-      <div class="practice-done">
-        <div class="practice-done-emoji">🎉</div>
-        <h2>Session complete!</h2>
-        <p>You went through ${practiceQueue.length} question${practiceQueue.length !== 1 ? 's' : ''}.</p>
-      </div>`;
-    return;
-  }
+  const body  = document.getElementById('practice-body');
+  body.innerHTML = '';
 
-  document.getElementById('practice-progress').textContent = `${practiceQueueIndex + 1} / ${practiceQueue.length}`;
-
-  const q = practiceQueue[practiceQueueIndex];
-  const cat = categories.find(c => c.id === q._catId);
-  const status = progress[q.id] || 'unseen';
-
-  body.innerHTML = `
-    <div class="detail-meta" id="practice-meta">
-      <span class="diff-badge ${q.difficulty}">${q.difficulty}</span>
-      ${cat ? `<span style="font-size:12px;color:var(--text-muted)">${cat.icon} ${cat.name}</span>` : ''}
-      <span style="font-size:12px;color:var(--text-muted)">· ${statusLabel(status)}</span>
-      ${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}
-    </div>
-    <div class="detail-question">${escHtml(q.question)}</div>
-    <button id="practice-show-answer" style="padding:9px 18px;background:var(--bg-subtle);border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text)">Show answer</button>
-    <div id="practice-answer-section" class="hidden">
-      <div class="answer-divider" style="height:1px;background:var(--border);margin:20px 0"></div>
-      <div class="answer-body" id="practice-answer-body"></div>
-      <div class="rate-buttons" id="practice-rate-buttons">
-        <button class="rate-btn shaky">Still shaky</button>
-        <button class="rate-btn gotit">Got it</button>
-        <button class="rate-btn mastered">Mastered ✓</button>
-      </div>
-    </div>`;
-
-  document.getElementById('practice-show-answer').addEventListener('click', () => {
-    document.getElementById('practice-show-answer').classList.add('hidden');
-    const ab = document.getElementById('practice-answer-body');
-    ab.innerHTML = marked.parse(q.answer || '');
-    ab.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
-    document.getElementById('practice-answer-section').classList.remove('hidden');
+  const byCat = {};
+  practiceQueue.forEach(q => {
+    if (!byCat[q._catId]) byCat[q._catId] = [];
+    byCat[q._catId].push(q);
   });
 
-  document.querySelectorAll('#practice-rate-buttons .rate-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const raw = btn.className.includes('mastered') ? 'mastered' : 'shaky';
-      setProgress(q.id, raw); // gotit and shaky both save as shaky
-      renderSidebar();
-      practiceQueueIndex++;
-      showPracticeQuestion();
+  categories
+    .filter(cat => byCat[cat.id])
+    .forEach(cat => {
+      const label = document.createElement('div');
+      label.className = 'search-group-label';
+      label.textContent = `${cat.icon} ${cat.name}`;
+      body.appendChild(label);
+
+      const list = document.createElement('div');
+      list.className = 'question-list';
+
+      byCat[cat.id].forEach(q => {
+        const status = progress[q.id] || 'unseen';
+        const el = document.createElement('div');
+        el.className = 'q-row';
+        el.innerHTML = `
+          <div class="status-dot ${status}"></div>
+          <span class="diff-badge ${q.difficulty}">${q.difficulty}</span>
+          <div class="q-row-body">
+            <div class="q-text">${escHtml(q.question)}</div>
+            <div class="q-tags">${(q.tags || []).map(t => `<span class="tag-pill">${escHtml(t)}</span>`).join('')}</div>
+          </div>`;
+        el.addEventListener('click', () => openQuestion(q, q._catId, 'practice', practiceQueue));
+        list.appendChild(el);
+      });
+
+      body.appendChild(list);
     });
-  });
 }
 
 document.getElementById('btn-practice').addEventListener('click', startPractice);
@@ -976,7 +1282,7 @@ function renderSearch(query) {
   const matches = allQuestions.filter(q =>
     q.question.toLowerCase().includes(query) ||
     (q.answer || '').toLowerCase().includes(query) ||
-    (q.tags || []).some(t => t.toLowerCase().includes(query))
+    (q.tags  || []).some(t => t.toLowerCase().includes(query))
   );
 
   const container = document.getElementById('search-results');
@@ -994,7 +1300,7 @@ function renderSearch(query) {
 
   container.innerHTML = '';
   Object.entries(byCat).forEach(([catId, qs]) => {
-    const cat = categories.find(c => c.id === catId);
+    const cat   = categories.find(c => c.id === catId);
     const label = document.createElement('div');
     label.className = 'search-group-label';
     label.textContent = `${cat.icon} ${cat.name}`;
@@ -1014,7 +1320,7 @@ function renderSearch(query) {
         </div>`;
       el.addEventListener('click', () => {
         document.getElementById('search').value = '';
-        openQuestion(q, catId, 'welcome');
+        openQuestion(q, catId, 'welcome', matches);
       });
       container.appendChild(el);
     });
@@ -1045,7 +1351,6 @@ function escHtml(str) {
 
 // ── Boot ───────────────────────────────────────────────────────────
 initTheme();
-
 marked.setOptions({ breaks: true });
 
 loadData()
@@ -1055,10 +1360,10 @@ loadData()
   })
   .catch(err => {
     document.getElementById('main').innerHTML = `
-      <div style="padding:40px;color:var(--hard)">
+      <div style="padding:40px;color:var(--hard);font-family:var(--font-ui)">
         <strong>Failed to load data.</strong><br><br>
         ${err.message}<br><br>
-        Make sure you're serving this over HTTP (not file://) or use a local server:<br>
+        Make sure you're serving this over HTTP (not file://) — use a local server:<br>
         <code style="font-family:monospace">npx serve .</code>
       </div>`;
   });
