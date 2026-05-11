@@ -24,19 +24,6 @@
     ]
   },
   {
-    "id": "spark-003",
-    "question": "What is partition skew, how do you detect it, and what are three concrete ways to fix it?",
-    "answer": "**Partition skew** occurs when data is unevenly distributed across partitions — a small number of partitions hold the vast majority of the data. The tasks processing those large partitions run much longer than everything else, stalling the stage while most executors sit idle.\n\n**How to detect it:**\n- In the Spark UI, go to the *Stages* tab and look at the task duration distribution. A skewed stage has a handful of tasks taking 10–100× longer than the median.\n- Check the *Summary Metrics* table: if max records/task dwarfs the median, you have skew.\n- Query-level: `df.groupBy(\"join_key\").count().orderBy(desc(\"count\"))` to spot hot keys.\n\n**Three concrete fixes:**\n\n1. **Salting.** Append a random integer suffix to the hot key, replicate the smaller side with all suffixes, then join and aggregate in two passes.\n```python\nimport pyspark.sql.functions as F\n\n# Salt the large side\nn_salt = 10\nbig = df.withColumn(\"salt\", (F.rand() * n_salt).cast(\"int\"))\nbig = big.withColumn(\"salted_key\", F.concat(F.col(\"key\"), F.lit(\"_\"), F.col(\"salt\")))\n\n# Explode the small side\nsmall_exploded = small.withColumn(\"salt\", F.explode(F.array([F.lit(i) for i in range(n_salt)])))\nsmall_exploded = small_exploded.withColumn(\"salted_key\", F.concat(F.col(\"key\"), F.lit(\"_\"), F.col(\"salt\")))\n\nresult = big.join(small_exploded, \"salted_key\")\n```\n\n2. **Adaptive Query Execution (AQE).** In Spark 3+, enable AQE and skew join handling:\n```python\nspark.conf.set(\"spark.sql.adaptive.enabled\", True)\nspark.conf.set(\"spark.sql.adaptive.skewJoin.enabled\", True)\n```\nAQE detects skewed partitions at runtime and splits them automatically.\n\n3. **Repartition before the join.** Use `repartitionByRange` or a custom partitioner to spread hot keys across more partitions before the shuffle.",
-    "difficulty": "hard",
-    "tags": [
-      "performance",
-      "skew",
-      "shuffle",
-      "aqe",
-      "optimization"
-    ]
-  },
-  {
     "id": "spark-004",
     "question": "How does the Delta Lake transaction log work, and what guarantees does it provide?",
     "answer": "Delta Lake stores data as Parquet files plus a `_delta_log/` directory at the table root. The transaction log is a sequence of JSON files (`000000000000000000000.json`, `000000000000000000001.json`, …) where each file represents one committed transaction.\n\n**What a log entry contains:**\n- `add` actions — files added by this transaction (path, size, stats, partition values)\n- `remove` actions — files logically deleted\n- `metaData` — schema, partition columns, configuration\n- `commitInfo` — operation type, timestamp, user\n\n```\n_delta_log/\n  00000000000000000000.json   # CREATE TABLE\n  00000000000000000001.json   # first INSERT\n  00000000000000000010.json   # checkpoint (Parquet snapshot)\n  00000000000000000011.json   # subsequent INSERT\n```\n\nEvery 10 commits Delta writes a **checkpoint** — a Parquet snapshot of the full log state — so readers don't have to replay from commit 0.\n\n**Guarantees provided:**\n\n- **Atomicity.** A write either fully commits (its JSON file is written) or doesn't exist. No partial writes are visible.\n- **Serializable isolation (optimistic concurrency).** Writers read the current version, compute changes, then attempt to commit. If a conflicting commit happened first, the writer retries or fails — no silent data corruption.\n- **Time travel.** Because old `add`/`remove` records are retained, you can read any historical version: `spark.read.format(\"delta\").option(\"versionAsOf\", 5).load(path)`.\n- **Schema enforcement.** The schema in `metaData` is checked on every write; mismatches are rejected before any files are written.\n\nThis log-based design is what separates Delta from raw Parquet — it brings database-style ACID semantics to object storage.",
@@ -58,6 +45,19 @@
       "spark-ui",
       "performance",
       "tuning"
+    ]
+  },
+  {
+    "id": "spark-003",
+    "question": "What is partition skew, how do you detect it, and what are three concrete ways to fix it?",
+    "answer": "**Partition skew** occurs when data is unevenly distributed across partitions — a small number of partitions hold the vast majority of the data. The tasks processing those large partitions run much longer than everything else, stalling the stage while most executors sit idle.\n\n**How to detect it:**\n- In the Spark UI, go to the *Stages* tab and look at the task duration distribution. A skewed stage has a handful of tasks taking 10–100× longer than the median.\n- Check the *Summary Metrics* table: if max records/task dwarfs the median, you have skew.\n- Query-level: `df.groupBy(\"join_key\").count().orderBy(desc(\"count\"))` to spot hot keys.\n\n**Three concrete fixes:**\n\n1. **Salting.** Append a random integer suffix to the hot key, replicate the smaller side with all suffixes, then join and aggregate in two passes.\n```python\nimport pyspark.sql.functions as F\n\n# Salt the large side\nn_salt = 10\nbig = df.withColumn(\"salt\", (F.rand() * n_salt).cast(\"int\"))\nbig = big.withColumn(\"salted_key\", F.concat(F.col(\"key\"), F.lit(\"_\"), F.col(\"salt\")))\n\n# Explode the small side\nsmall_exploded = small.withColumn(\"salt\", F.explode(F.array([F.lit(i) for i in range(n_salt)])))\nsmall_exploded = small_exploded.withColumn(\"salted_key\", F.concat(F.col(\"key\"), F.lit(\"_\"), F.col(\"salt\")))\n\nresult = big.join(small_exploded, \"salted_key\")\n```\n\n2. **Adaptive Query Execution (AQE).** In Spark 3+, enable AQE and skew join handling:\n```python\nspark.conf.set(\"spark.sql.adaptive.enabled\", True)\nspark.conf.set(\"spark.sql.adaptive.skewJoin.enabled\", True)\n```\nAQE detects skewed partitions at runtime and splits them automatically.\n\n3. **Repartition before the join.** Use `repartitionByRange` or a custom partitioner to spread hot keys across more partitions before the shuffle.",
+    "difficulty": "hard",
+    "tags": [
+      "performance",
+      "skew",
+      "shuffle",
+      "aqe",
+      "optimization"
     ]
   },
   {
