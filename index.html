@@ -264,6 +264,12 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 14px 16px;
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .progress-card:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
     }
     .progress-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .progress-card-name { font-weight: 500; }
@@ -509,7 +515,7 @@
 
       #sidebar {
         position: fixed;
-        left: -var(--sidebar-w);
+        left: 0;
         top: 0;
         bottom: 0;
         z-index: 60;
@@ -660,9 +666,13 @@ async function fetchJSON(path) {
 async function loadData() {
   categories = await fetchJSON('data/_categories.json');
   await Promise.all(categories.map(async cat => {
-    const qs = await fetchJSON(`data/${cat.id}.json`);
-    questions[cat.id] = qs;
-    allQuestions.push(...qs.map(q => ({ ...q, _catId: cat.id })));
+    try {
+      const qs = await fetchJSON(`data/${cat.id}.json`);
+      questions[cat.id] = qs;
+      allQuestions.push(...qs.map(q => ({ ...q, _catId: cat.id })));
+    } catch {
+      questions[cat.id] = [];
+    }
   }));
 }
 
