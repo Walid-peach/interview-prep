@@ -120,7 +120,14 @@
       margin-bottom: 13px;
     }
     #sidebar-brand-icon { font-size: 20px; line-height: 1; }
-    #sidebar-title { font-size: 16px; font-weight: 700; color: var(--text); }
+    #sidebar-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+    }
+    #sidebar-title:hover { color: var(--text-muted); }
 
     #practice-row { display: flex; gap: 6px; align-items: center; }
 
@@ -905,6 +912,14 @@ function initTheme() {
   applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 }
 
+document.getElementById('sidebar-title').addEventListener('click', () => {
+  currentCatId = null;
+  renderSidebar();
+  renderWelcome();
+  showView('welcome');
+  closeSidebar();
+});
+
 document.getElementById('btn-theme').addEventListener('click', () => {
   const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   applyTheme(next);
@@ -1149,7 +1164,7 @@ document.querySelectorAll('.rate-btn').forEach(btn => {
     if (!currentQuestion) return;
     const { q, catId, backView } = currentQuestion;
     const raw = btn.dataset.status;
-    setProgress(q.id, raw === 'gotit' ? 'shaky' : raw === 'shaky' ? 'shaky' : 'mastered');
+    setProgress(q.id, raw === 'mastered' ? 'mastered' : 'shaky');
     renderSidebar();
     if (backView === 'practice') {
       renderPracticeList(); showView('practice');
