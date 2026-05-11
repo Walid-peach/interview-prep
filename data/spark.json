@@ -4,34 +4,115 @@
     "question": "Explain narrow vs wide transformations in Spark. Why does the distinction matter for performance?",
     "answer": "**Narrow transformations** are operations where each output partition depends on at most one input partition. No data needs to move across the network — Spark can pipeline these within a single stage.\n\nExamples: `map`, `filter`, `flatMap`, `union`.\n\n**Wide transformations** (also called shuffle transformations) require data from multiple input partitions to compute a single output partition. Spark must write intermediate results to disk and transfer them over the network — this becomes a stage boundary.\n\nExamples: `groupByKey`, `reduceByKey`, `join`, `distinct`, `repartition`.\n\n```python\n# Narrow: each partition is filtered independently\ndf.filter(col(\"status\") == \"active\")\n\n# Wide: Spark must co-locate all rows with the same key\ndf.groupBy(\"user_id\").agg(count(\"*\"))\n```\n\n**Why it matters:**\n\n- Shuffles are the single largest source of latency in Spark jobs. They serialize data, write shuffle files to local disk, and send them over the network.\n- Each wide transformation creates a new stage. Stage boundaries prevent pipelining and are visible as separate DAG segments in the Spark UI.\n- Minimizing shuffles is the first lever for tuning slow jobs. Strategies include pushing filters before joins (predicate pushdown), using `reduceByKey` instead of `groupByKey` (partial aggregation before shuffle), and broadcasting small tables to eliminate the join shuffle entirely.",
     "difficulty": "easy",
-    "tags": ["performance", "shuffle", "dag", "fundamentals"]
+    "tags": [
+      "performance",
+      "shuffle",
+      "dag",
+      "fundamentals"
+    ]
   },
   {
     "id": "spark-002",
     "question": "When should you use a broadcast join in Spark, and what are the risks of over-using it?",
     "answer": "A **broadcast join** sends a complete copy of the smaller table to every executor, so each executor can perform the join locally without any shuffle. Spark triggers this automatically when the smaller table is below `spark.sql.autoBroadcastJoinThreshold` (default 10 MB), or you can force it with a hint.\n\n```python\nfrom pyspark.sql.functions import broadcast\n\n# Explicit broadcast hint\nresult = large_df.join(broadcast(small_df), on=\"user_id\")\n\n# Or tune the threshold (e.g., 50 MB)\nspark.conf.set(\"spark.sql.autoBroadcastJoinThreshold\", 50 * 1024 * 1024)\n```\n\n**When to use it:**\n- One side of the join is small (dimension table, lookup table, config data).\n- The join key has high cardinality so a sort-merge join would produce many shuffle partitions.\n- You're joining inside a loop or UDF where shuffle overhead compounds.\n\n**Risks of over-using:**\n- **OOM on executors.** Each executor must hold the entire broadcast table in memory. Broadcasting a 500 MB table on 50 executors consumes 25 GB of executor heap.\n- **Driver bottleneck.** The driver collects and serializes the table before broadcasting. Large tables can stall the driver or time out.\n- **Stale data.** In iterative algorithms the broadcast value is fixed at creation time — mutations to the original dataset are not reflected.\n\nA good rule of thumb: broadcast tables under ~100–200 MB depending on executor memory. For anything larger, prefer a sort-merge join with well-chosen partition counts.",
     "difficulty": "medium",
-    "tags": ["joins", "performance", "memory", "optimization"]
+    "tags": [
+      "joins",
+      "performance",
+      "memory",
+      "optimization"
+    ]
   },
   {
     "id": "spark-003",
     "question": "What is partition skew, how do you detect it, and what are three concrete ways to fix it?",
     "answer": "**Partition skew** occurs when data is unevenly distributed across partitions — a small number of partitions hold the vast majority of the data. The tasks processing those large partitions run much longer than everything else, stalling the stage while most executors sit idle.\n\n**How to detect it:**\n- In the Spark UI, go to the *Stages* tab and look at the task duration distribution. A skewed stage has a handful of tasks taking 10–100× longer than the median.\n- Check the *Summary Metrics* table: if max records/task dwarfs the median, you have skew.\n- Query-level: `df.groupBy(\"join_key\").count().orderBy(desc(\"count\"))` to spot hot keys.\n\n**Three concrete fixes:**\n\n1. **Salting.** Append a random integer suffix to the hot key, replicate the smaller side with all suffixes, then join and aggregate in two passes.\n```python\nimport pyspark.sql.functions as F\n\n# Salt the large side\nn_salt = 10\nbig = df.withColumn(\"salt\", (F.rand() * n_salt).cast(\"int\"))\nbig = big.withColumn(\"salted_key\", F.concat(F.col(\"key\"), F.lit(\"_\"), F.col(\"salt\")))\n\n# Explode the small side\nsmall_exploded = small.withColumn(\"salt\", F.explode(F.array([F.lit(i) for i in range(n_salt)])))\nsmall_exploded = small_exploded.withColumn(\"salted_key\", F.concat(F.col(\"key\"), F.lit(\"_\"), F.col(\"salt\")))\n\nresult = big.join(small_exploded, \"salted_key\")\n```\n\n2. **Adaptive Query Execution (AQE).** In Spark 3+, enable AQE and skew join handling:\n```python\nspark.conf.set(\"spark.sql.adaptive.enabled\", True)\nspark.conf.set(\"spark.sql.adaptive.skewJoin.enabled\", True)\n```\nAQE detects skewed partitions at runtime and splits them automatically.\n\n3. **Repartition before the join.** Use `repartitionByRange` or a custom partitioner to spread hot keys across more partitions before the shuffle.",
     "difficulty": "hard",
-    "tags": ["performance", "skew", "shuffle", "aqe", "optimization"]
+    "tags": [
+      "performance",
+      "skew",
+      "shuffle",
+      "aqe",
+      "optimization"
+    ]
   },
   {
     "id": "spark-004",
     "question": "How does the Delta Lake transaction log work, and what guarantees does it provide?",
     "answer": "Delta Lake stores data as Parquet files plus a `_delta_log/` directory at the table root. The transaction log is a sequence of JSON files (`000000000000000000000.json`, `000000000000000000001.json`, …) where each file represents one committed transaction.\n\n**What a log entry contains:**\n- `add` actions — files added by this transaction (path, size, stats, partition values)\n- `remove` actions — files logically deleted\n- `metaData` — schema, partition columns, configuration\n- `commitInfo` — operation type, timestamp, user\n\n```\n_delta_log/\n  00000000000000000000.json   # CREATE TABLE\n  00000000000000000001.json   # first INSERT\n  00000000000000000010.json   # checkpoint (Parquet snapshot)\n  00000000000000000011.json   # subsequent INSERT\n```\n\nEvery 10 commits Delta writes a **checkpoint** — a Parquet snapshot of the full log state — so readers don't have to replay from commit 0.\n\n**Guarantees provided:**\n\n- **Atomicity.** A write either fully commits (its JSON file is written) or doesn't exist. No partial writes are visible.\n- **Serializable isolation (optimistic concurrency).** Writers read the current version, compute changes, then attempt to commit. If a conflicting commit happened first, the writer retries or fails — no silent data corruption.\n- **Time travel.** Because old `add`/`remove` records are retained, you can read any historical version: `spark.read.format(\"delta\").option(\"versionAsOf\", 5).load(path)`.\n- **Schema enforcement.** The schema in `metaData` is checked on every write; mismatches are rejected before any files are written.\n\nThis log-based design is what separates Delta from raw Parquet — it brings database-style ACID semantics to object storage.",
     "difficulty": "medium",
-    "tags": ["delta-lake", "acid", "storage", "time-travel"]
+    "tags": [
+      "delta-lake",
+      "acid",
+      "storage",
+      "time-travel"
+    ]
   },
   {
     "id": "spark-005",
     "question": "Walk me through how you'd debug a slow Spark job using the Spark UI. What do you look for first?",
     "answer": "When a job is slower than expected, I open the Spark UI and work top-down through four areas:\n\n**1. Jobs tab — find the slow stage.**\nExpand the job and look at stage durations. The longest stage is the bottleneck. Note whether it's a shuffle-read stage (wide transformation) or a simple map stage.\n\n**2. Stages tab — diagnose the slow stage.**\n- **Task duration distribution.** A long tail (max >> median) means skew. A uniformly slow distribution means the work itself is expensive or data volume is too high.\n- **Input vs. shuffle read size.** Huge shuffle read → consider tuning `spark.sql.shuffle.partitions` or enabling AQE.\n- **GC time.** If GC time is >10% of task time, executor heap is too small or you're creating too many objects (e.g., UDFs with Python overhead).\n- **Spill (memory/disk).** Any spill means executors ran out of memory mid-shuffle. Increase executor memory or reduce partition size.\n\n**3. Storage tab.**\nCheck cache hit rates if you're caching DataFrames. A low hit rate means the cache was evicted (not enough memory) and Spark is recomputing from scratch.\n\n**4. SQL / DataFrame tab.**\nFor DataFrame jobs, the SQL tab shows the physical plan with row counts and timing per operator. Look for:\n- `BroadcastNestedLoopJoin` where you expected `SortMergeJoin` (missing join key)\n- Unexpectedly large row counts early in the plan (predicate pushdown not happening)\n- `Exchange` nodes (each one is a shuffle)\n\n```\n== Physical Plan ==\n*(3) HashAggregate\n+- Exchange hashpartitioning(user_id, 200)  <-- shuffle here\n   +- *(2) Filter (status = active)\n      +- *(1) FileScan parquet\n```\n\nOnce I've identified the bottleneck — skew, spill, bad join type, or too few/many partitions — I apply the appropriate fix and re-run.",
     "difficulty": "medium",
-    "tags": ["debugging", "spark-ui", "performance", "tuning"]
+    "tags": [
+      "debugging",
+      "spark-ui",
+      "performance",
+      "tuning"
+    ]
+  },
+  {
+    "id": "spark-006",
+    "difficulty": "hard",
+    "tags": [
+      "aqe",
+      "performance",
+      "optimization"
+    ],
+    "question": "AQE is enabled on your Spark cluster. A join that used to take 45 minutes now sometimes takes 10 minutes and sometimes takes 55 minutes on identical input data. What is causing the nondeterminism and how do you fix it?",
+    "answer": "Nondeterministic AQE runtime on identical input is almost always caused by AQE's broadcast threshold or partition coalescing decision fluctuating at the edge of a threshold.\n\n**How AQE makes decisions:**\nAQE collects actual runtime statistics at shuffle exchange boundaries and uses them to: (1) coalesce small shuffle partitions, (2) switch join strategies at runtime (SortMergeJoin to BroadcastHashJoin), and (3) split skewed partitions.\n\n**Root cause 1: AQE broadcast threshold being crossed inconsistently**\n```python\nspark.conf.get(\"spark.sql.adaptive.autoBroadcastJoinThreshold\")  # default 30MB\n```\nIf the build side of a join fluctuates between 28MB and 32MB run-to-run (due to compression variance or filter pushdown timing), AQE sometimes picks BroadcastHashJoin (10 min) and sometimes falls back to SortMergeJoin (55 min).\n\n```bash\n# Check in Spark UI -> SQL tab -> look for different join strategies between fast and slow runs\n```\n\n**Fix: Force the join strategy if the table is reliably small**\n```python\nfrom pyspark.sql.functions import broadcast\nresult = large_df.join(broadcast(dimension_df), \"key\")\n\n# Or raise threshold to stabilize AQE decision:\nspark.conf.set(\"spark.sql.adaptive.autoBroadcastJoinThreshold\", \"200m\")\n```\n\n**Root cause 2: Partition coalescing varying based on shuffle output size**\n```python\n# If shuffle output is 200MB in some runs and 350MB in others,\n# AQE coalesces to 3 vs 6 partitions respectively\nspark.conf.set(\"spark.sql.adaptive.advisoryPartitionSizeInBytes\", \"128m\")\n```\nFewer partitions = faster if data fits, but slower if tasks are over-sized.\n\n**Fix: Set a minimum partition count floor**\n```python\nspark.conf.set(\"spark.sql.adaptive.coalescePartitions.minPartitionNum\", \"50\")\n```\n\n**Diagnostic approach:**\n1. Enable AQE logging: spark.conf.set('spark.sql.adaptive.logLevel', 'INFO')\n2. Compare physical plans of a fast run vs a slow run in the Spark UI SQL tab\n3. Look for different join types or different task counts between runs\n4. Pin the varying decision to a deterministic value"
+  },
+  {
+    "id": "spark-007",
+    "difficulty": "hard",
+    "tags": [
+      "memory",
+      "performance",
+      "tuning"
+    ],
+    "question": "A job is spilling to disk despite having 64GB executor memory. Raising spark.executor.memory did not fix it. Walk through the unified memory model and every config lever that controls memory allocation.",
+    "answer": "Most engineers raise spark.executor.memory and are confused when spill persists. The issue is usually in the memory fraction configuration, not the total heap size.\n\n**Spark unified memory model:**\n```\nTotal Executor JVM Memory (64GB configured)\n├── Reserved Memory: 300MB (hardcoded, Spark internals)\n├── User Memory: (64GB - 300MB) * (1 - spark.memory.fraction)\n│     └── User data structures, UDF state, non-Spark objects\n└── Unified Memory: (64GB - 300MB) * spark.memory.fraction  [default: 0.6]\n      ├── Execution Memory (dynamic: sort buffers, hash tables, join buffers)\n      └── Storage Memory (dynamic: cached DataFrames, broadcast vars)\n```\n\n**The math:** 63.7GB * 0.6 = 38.2GB unified. If you are caching DataFrames AND running heavy joins, storage memory competes with execution memory for the same 38.2GB. One evicts the other, causing cache misses or join spill.\n\n**Lever 1: Raise the unified memory fraction**\n```python\nspark.conf.set(\"spark.memory.fraction\", \"0.8\")\nspark.conf.set(\"spark.memory.storageFraction\", \"0.3\")  # 30% of 80% is storage floor\n```\n\n**Lever 2: Memory overhead (most overlooked)**\nspark.executor.memory is JVM heap only. Off-JVM space also needed:\n```python\nspark.conf.set(\"spark.executor.memoryOverhead\", \"8g\")  # default is max(10%, 384MB)\nspark.conf.set(\"spark.executor.pyspark.memory\", \"4g\")  # for PySpark Python workers\n```\nIf a task is OOMKilled by the Linux kernel (not JVM), it is memoryOverhead, not heap. Check cgroup memory limits via kubectl top pod.\n\n**Lever 3: Off-heap for string-heavy DataFrames**\n```python\nspark.conf.set(\"spark.memory.offHeap.enabled\", \"true\")\nspark.conf.set(\"spark.memory.offHeap.size\", \"16g\")\n```\nOff-heap is not subject to GC. Reduces GC pressure and spill for string-heavy workloads.\n\n**Lever 4: Reduce concurrent tasks per executor**\n```python\nspark.conf.set(\"spark.executor.cores\", \"4\")  # 4 tasks share 38.2GB = 9.5GB each\n# If cores=8, each task only gets 4.75GB\n```\n\n**Diagnosis:**\n```bash\n# In Spark UI -> Stages -> Summary Metrics\n# Look at: Spill (Memory) and Spill (Disk)\n# If spill > 0 and GC time > 10% of task time, heap is the constraint\n# If OOMKilled by kernel, memoryOverhead is the constraint\n```"
+  },
+  {
+    "id": "spark-008",
+    "difficulty": "hard",
+    "tags": [
+      "serialization",
+      "debugging",
+      "python"
+    ],
+    "question": "A Spark job fails with PicklingError on the cluster but works locally. Explain exactly why, how Spark serializes Python functions, and three patterns that cause this error.",
+    "answer": "This error is specific to PySpark's Python function serialization model.\n\n**How PySpark serializes functions:**\nWhen you call df.rdd.map(my_function) or define a Python UDF, Spark must send the function to every executor. It uses cloudpickle — a serialization library that can serialize functions, closures, and lambdas. Cloudpickle serializes the function code AND everything in its closure (variables captured from the enclosing scope).\n\nLocally: driver and executors share the same Python process, no serialization needed.\nOn cluster: function must be serialized, sent over the network, and deserialized in a different Python process on a different machine.\n\n**Pattern 1: Closure captures a non-serializable object**\n```python\n# BROKEN: db_conn has socket/file handles — not picklable\ndb_conn = create_db_connection()\ndef process_row(row):\n    return db_conn.query(row.id)  # captures db_conn in closure\ndf.rdd.map(process_row)  # PicklingError\n\n# FIX: initialize inside the function (per executor, not serialized)\ndef process_row(row):\n    conn = create_db_connection()\n    return conn.query(row.id)\n```\n\n**Pattern 2: Class instance with non-serializable attribute**\n```python\n# BROKEN: self.model may not be picklable\nclass Transformer:\n    def __init__(self):\n        self.model = load_ml_model()\n    def transform(self, row):\n        return self.model.predict(row)\n\nt = Transformer()\ndf.rdd.map(t.transform)  # serializes 't' including self.model\n\n# FIX: broadcast the model\nmodel_bc = spark.sparkContext.broadcast(load_ml_model())\ndef transform(row):\n    return model_bc.value.predict(row)\n```\n\n**Pattern 3: Import that exists on driver but not on executors**\n```python\nimport custom_internal_library  # installed on driver only\ndef process(row):\n    return custom_internal_library.process(row)  # ImportError on executors\n# FIX: use --py-files or cluster init scripts to install on executors\n```\n\n**Debugging:**\n```python\nimport cloudpickle\ntry:\n    cloudpickle.dumps(my_function)\nexcept Exception as e:\n    print(f\"Not serializable: {e}\")\n\n# Find which closure variable is the problem\nimport inspect\nfor name, value in inspect.getclosurevars(my_function).nonlocals.items():\n    try:\n        cloudpickle.dumps(value)\n    except Exception as e:\n        print(f\"Cannot pickle '{name}': {e}\")\n```"
+  },
+  {
+    "id": "spark-009",
+    "difficulty": "hard",
+    "tags": [
+      "delta-lake",
+      "compaction",
+      "streaming"
+    ],
+    "question": "A Delta table receives 50,000 micro-batch appends per day from a Spark Structured Streaming job. After 3 months it has 4.5 million files and query performance has degraded 20x. OPTIMIZE runs nightly but takes 6 hours and barely reduces the file count. Diagnose and fix.",
+    "answer": "4.5 million files after 3 months of micro-batching is a write amplification problem. OPTIMIZE is slow because it is compacting millions of files — treating the symptom rather than the cause.\n\n**Root cause:**\n50,000 appends per day from micro-batches means many small files per partition per run. OPTIMIZE compacts these nightly but cannot keep up if the write pattern continues producing small files faster than compaction can merge them.\n\n**Fix 1: Enable optimized writes at write time**\n```python\ndf.writeStream \\\n  .format(\"delta\") \\\n  .option(\"checkpointLocation\", \"/checkpoint\") \\\n  .option(\"delta.autoOptimize.optimizeWrite\", \"true\") \\\n  .start(\"/path/to/table\")\n```\noptimizeWrite rearranges data before committing to produce larger files (target 128MB) instead of one file per task per micro-batch.\n\n**Fix 2: Increase micro-batch trigger interval**\n```python\n.trigger(processingTime='5 minutes')  # batch 5min of data per write vs every second\n```\nBatching 5 minutes = 8x fewer files per hour than batching every 30 seconds.\n\n**Fix 3: Scope OPTIMIZE to recent partitions only**\nThe 6-hour OPTIMIZE is scanning all 4.5M files. Scope it:\n```python\nfrom delta.tables import DeltaTable\nimport datetime\n\ncutoff = (datetime.date.today() - datetime.timedelta(days=7)).isoformat()\nDeltaTable.forPath(spark, \"/path/to/table\") \\\n    .optimize() \\\n    .where(f\"event_date >= '{cutoff}'\") \\\n    .executeCompaction()\n```\n\n**Fix 4: Switch to Liquid Clustering (Delta 3.1+ / Databricks 13.2+)**\n```sql\nALTER TABLE my_table CLUSTER BY (event_date, region);\nOPTIMIZE my_table;\n```\nLiquid clustering is incremental — it only compacts recently written data, not the entire table. OPTIMIZE runs in O(new data) not O(all data).\n\n**Fix 5: Run VACUUM after compaction**\n```sql\nVACUUM my_table RETAIN 168 HOURS;\n```\nAfter OPTIMIZE merges small files into large files, VACUUM deletes the original small files. Without VACUUM, storage doubles.\n\n**Verify recovery:**\n```sql\nDESCRIBE DETAIL delta.`/path/to/table`;\n-- numFiles should drop from 4.5M to under 10K after full compaction\n-- then stabilize at a low number with optimizeWrite enabled\n```"
+  },
+  {
+    "id": "spark-010",
+    "difficulty": "hard",
+    "tags": [
+      "joins",
+      "performance",
+      "optimization"
+    ],
+    "question": "You have a 10TB fact table joining an 800GB dimension table. Sort-merge join takes 4 hours. Broadcast is impossible (800GB >> threshold). What advanced techniques reduce join time to under 30 minutes?",
+    "answer": "When both tables are too large to broadcast and the join key is well-distributed, the bottleneck is shuffle volume. The goal is to reduce or eliminate what gets shuffled.\n\n**Technique 1: Bucketing — eliminates shuffle entirely (biggest gain)**\n\nBucketing pre-partitions data by the join key at write time. If both tables are bucketed on the same key with the same bucket count, Spark joins bucket-to-bucket without shuffling.\n\n```python\n# One-time write cost — permanent benefit for all future joins\nfact_df.write \\\n    .bucketBy(512, \"user_id\") \\\n    .sortBy(\"user_id\") \\\n    .saveAsTable(\"fact_table_bucketed\")\n\ndim_df.write \\\n    .bucketBy(512, \"user_id\") \\\n    .sortBy(\"user_id\") \\\n    .saveAsTable(\"dim_table_bucketed\")\n\nfact = spark.table(\"fact_table_bucketed\")\ndim = spark.table(\"dim_table_bucketed\")\nresult = fact.join(dim, \"user_id\")\n```\n\nVerify no shuffle in the query plan:\n```\n== Physical Plan ==\nSortMergeJoin  <- no Exchange node above this = no shuffle\n:- *(1) Sort [user_id ASC]\n:  +- *(1) FileScan (bucket scan)\n+- *(2) Sort [user_id ASC]\n   +- *(2) FileScan (bucket scan)\n```\n\n**Technique 2: Partition pruning before the join**\n```python\n# If fact table is partitioned by date and the query has a date filter:\nfact.filter(\"event_date = '2024-01-15'\").join(dim, \"user_id\")\n# Reduces join input from 10TB to ~27GB for one day\n```\n\n**Technique 3: Optimal shuffle partition count**\nDefault shuffle.partitions of 200 is far too low for a 10TB + 800GB join.\n```python\n# Target 128-256MB per partition\n# Total shuffle ~11TB -> 11000GB / 0.2GB = ~55000 partitions\nspark.conf.set(\"spark.sql.shuffle.partitions\", \"50000\")\n# Or let AQE choose dynamically:\nspark.conf.set(\"spark.sql.adaptive.enabled\", \"true\")\n```\n\n**Technique 4: Cache and range-partition the dimension table**\n```python\ndim_repartitioned = dim_df.repartitionByRange(512, \"user_id\").cache()\ndim_repartitioned.count()  # force cache\nfact.join(dim_repartitioned, \"user_id\")  # dimension already in memory, correctly partitioned\n```\n\n**Expected outcome:** bucketing alone (4h -> 15-25 min) because it eliminates the shuffle entirely. All other techniques reduce shuffle cost — only bucketing eliminates it. For a repeatedly joined fact+dimension pair, bucketing is the permanent fix."
   }
 ]
