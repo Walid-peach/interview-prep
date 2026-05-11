@@ -5,19 +5,9 @@
     "icon": "⚡"
   },
   {
-    "id": "behavioral",
-    "name": "Behavioral",
-    "icon": "💬"
-  },
-  {
-    "id": "airflow",
-    "name": "Apache Airflow",
-    "icon": "🌬️"
-  },
-  {
-    "id": "terraform",
-    "name": "Terraform",
-    "icon": "🌍"
+    "id": "dbt",
+    "name": "dbt",
+    "icon": "⚙️"
   },
   {
     "id": "kafka",
@@ -25,19 +15,19 @@
     "icon": "🐿️"
   },
   {
-    "id": "dbt",
-    "name": "dbt",
-    "icon": "🏗️"
+    "id": "snowflake",
+    "name": "Snowflake",
+    "icon": "❄️"
   },
   {
-    "id": "aws",
-    "name": "Amazon Web Services",
-    "icon": "☁️"
+    "id": "databricks",
+    "name": "Databricks",
+    "icon": "🧱"
   },
   {
-    "id": "kubernetes",
-    "name": "Kubernetes",
-    "icon": "☸️"
+    "id": "airflow",
+    "name": "Apache Airflow",
+    "icon": "🌬️"
   },
   {
     "id": "spark-stream",
@@ -47,21 +37,31 @@
   {
     "id": "system-design",
     "name": "System Design",
-    "icon": "🏗️"
+    "icon": "🏛️"
+  },
+  {
+    "id": "aws",
+    "name": "Amazon Web Services",
+    "icon": "☁️"
+  },
+  {
+    "id": "terraform",
+    "name": "Terraform",
+    "icon": "🌍"
+  },
+  {
+    "id": "kubernetes",
+    "name": "Kubernetes",
+    "icon": "☸️"
+  },
+  {
+    "id": "behavioral",
+    "name": "Behavioral",
+    "icon": "💬"
   },
   {
     "id": "personal",
     "name": "Personal",
     "icon": "👤"
-  },
-  {
-    "id": "databricks",
-    "name": "Databricks",
-    "icon": "🧱"
-  },
-  {
-    "id": "snowflake",
-    "name": "Snowflake",
-    "icon": "❄️"
   }
 ]
