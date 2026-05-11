@@ -55,6 +55,16 @@
     "icon": "☸️"
   },
   {
+    "id": "ci-cd",
+    "name": "CI/CD",
+    "icon": "🔄"
+  },
+  {
+    "id": "best-practice",
+    "name": "Best Practices",
+    "icon": "✅"
+  },
+  {
     "id": "behavioral",
     "name": "Behavioral",
     "icon": "💬"

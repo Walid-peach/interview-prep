@@ -1,0 +1,162 @@
+[
+  {
+    "id": "best-practice-data-001",
+    "question": "What would you monitor in a production data pipeline beyond job success or failure?",
+    "answer_guidance": "A strong answer should explain that pipeline monitoring has three layers: execution health, data health, and business impact. Execution health includes job status, retries, duration, resource usage, and SLA breaches. Data health includes freshness, row counts, null rates, duplicate rates, schema drift, rejected records, and reconciliation checks. Business impact includes whether critical dashboards, finance tables, APIs, or ML features are affected. Interviewers penalize candidates who only mention Airflow task failures or Databricks job status, because a pipeline can be green but still produce incomplete or wrong data. Give an example: a job can succeed with zero rows because the source file was empty. A senior answer should say how alerts are routed by severity and ownership. Key phrase: 'A green pipeline does not always mean correct data.'",
+    "what_they_are_probing": "They are checking whether you understand production monitoring as data reliability, not just infrastructure monitoring.",
+    "difficulty": "easy",
+    "tags": ["monitoring", "data-quality", "reliability", "observability"]
+  },
+  {
+    "id": "best-practice-data-002",
+    "question": "How would you monitor data freshness for critical tables with different SLAs?",
+    "answer_guidance": "A strong answer should define freshness at the dataset level, not only at the orchestration level. Track last successful ingestion time, last successful transformation time, last publication time, and the delay between source event time and table update time. Explain that different datasets need different freshness rules: a finance table with a 30-minute SLA should trigger an alert quickly, while an analytics table with a 6-hour SLA can tolerate more delay. A strong answer should mention freshness metadata stored in audit tables and exposed to dashboards. Interviewers penalize answers that only rely on job schedules, because a scheduled job can run without producing fresh output. Key phrase: 'Freshness should be monitored at the table level, not only at the job level.'",
+    "what_they_are_probing": "They want to see if you can connect SLA management to dataset-level observability.",
+    "difficulty": "easy",
+    "tags": ["freshness", "sla", "monitoring", "tables"]
+  },
+  {
+    "id": "best-practice-data-003",
+    "question": "How would you detect volume anomalies in a data pipeline?",
+    "answer_guidance": "A strong answer should say that volume checks compare current loads against expected historical patterns. Track input files, input rows, output rows, rejected records, data size, partitions processed, and records by source or country. Use thresholds based on historical baselines, not fixed generic numbers. For example, if a table usually receives 10 million rows per day and suddenly receives 50,000 rows, the job may succeed but the dataset is probably incomplete. Also mention the opposite case: unexpected spikes can indicate duplicates, replay, or source issues. Interviewers penalize only checking whether the table is non-empty. A senior answer should distinguish warning thresholds from blocking thresholds. Key phrase: 'A successful job with abnormal volume is still a data incident.'",
+    "what_they_are_probing": "They are checking whether you can detect incomplete or duplicated data before users report it.",
+    "difficulty": "easy",
+    "tags": ["volume", "anomaly-detection", "monitoring", "data-quality"]
+  },
+  {
+    "id": "best-practice-data-013",
+    "question": "What best practices would you apply when designing a bronze, silver, and gold data architecture?",
+    "answer_guidance": "A strong answer should explain the responsibility of each layer. Bronze stores raw or minimally transformed data with ingestion metadata for replay and audit. Silver applies cleaning, standardization, deduplication, schema validation, and conformed business keys. Gold contains certified, business-ready tables, aggregates, and serving datasets. Monitoring should exist at each promotion step: ingestion checks in bronze, quality checks in silver, and business KPI checks in gold. Interviewers penalize treating bronze, silver, and gold as just folder names or schemas. The important concept is controlled promotion and increasing trust. Key phrase: 'The medallion architecture is a trust progression, not just a storage convention.'",
+    "what_they_are_probing": "They are checking whether you understand layered architecture as a reliability and governance pattern.",
+    "difficulty": "easy",
+    "tags": ["medallion", "bronze", "silver", "gold"]
+  },
+  {
+    "id": "best-practice-data-020",
+    "question": "What metrics would you track to know whether your data platform is reliable overall?",
+    "answer_guidance": "A strong answer should include platform-level reliability metrics, not just pipeline-level checks. Track SLA compliance, freshness breaches, incident count, mean time to detect, mean time to recover, failed runs, retry rates, data quality failures, schema drift incidents, duplicate incidents, cost per pipeline, deployment-related incidents, and user-reported data issues. Also track coverage: what percentage of critical tables have freshness checks, quality checks, owners, lineage, and runbooks. Interviewers penalize measuring only technical job success. A senior answer should show that reliability is measured by user trust and business continuity. Key phrase: 'The real metric is not how many jobs succeeded; it is how often trusted data was available when the business needed it.'",
+    "what_they_are_probing": "They are assessing whether you can think at platform reliability level, not only individual pipeline level.",
+    "difficulty": "easy",
+    "tags": ["platform-reliability", "metrics", "sla", "observability"]
+  },
+  {
+    "id": "best-practice-data-004",
+    "question": "How would you monitor schema drift in batch and streaming pipelines?",
+    "answer_guidance": "A strong answer should explain that schema drift must be classified by severity. Safe changes, like adding a nullable column, can often be accepted in bronze or raw layers. Breaking changes, like removed columns, renamed fields, type changes, or missing mandatory fields, should trigger alerts and possibly quarantine. In streaming, schema changes are more dangerous because they can break stateful processing or downstream parsing continuously. Mention schema registry, data contracts, Auto Loader schema evolution, dbt tests, or custom schema validation depending on the stack. Interviewers penalize saying 'I enable schema evolution' as the full answer. Schema evolution is useful, but uncontrolled evolution can corrupt curated layers. Key phrase: 'Schema drift can be absorbed in bronze, but it must be controlled before silver and gold.'",
+    "what_they_are_probing": "They are testing whether you can handle source changes without silently breaking downstream data products.",
+    "difficulty": "medium",
+    "tags": ["schema-drift", "data-contracts", "streaming", "quarantine"]
+  },
+  {
+    "id": "best-practice-data-005",
+    "question": "Which data quality checks should block a pipeline, and which should only trigger warnings?",
+    "answer_guidance": "A strong answer should connect checks to business risk. Blocking checks should prevent publication when data would be misleading or dangerous: missing primary keys, duplicate business keys, missing exchange rates in finance, invalid currencies, failed reconciliation totals, or missing mandatory partitions. Warning checks can include small volume deviations, optional field null increases, or non-critical late-arriving data. A senior answer should explain that quality checks should control promotion from silver to gold, especially for finance or executive dashboards. Interviewers penalize treating every check equally, because blocking too much hurts availability, while warning too much can let bad data through. Key phrase: 'Data quality should control promotion to gold, not just report problems after publication.'",
+    "what_they_are_probing": "They want to know if you can balance correctness, availability, and business risk.",
+    "difficulty": "medium",
+    "tags": ["data-quality", "gold-layer", "risk", "validation"]
+  },
+  {
+    "id": "best-practice-data-006",
+    "question": "How would you design alerting so the data team does not ignore alerts?",
+    "answer_guidance": "A strong answer should focus on actionable alerts. Every alert should include pipeline name, dataset name, environment, severity, business impact, error message, failed task, last successful run, link to logs, and suggested first action. Define severity levels: critical alerts for missed finance publication or broken executive dashboards, warnings for non-critical analytics delays. Alerts should have owners and escalation paths. Avoid alerting on symptoms that do not require human action. Interviewers penalize answers that create noisy Slack channels with hundreds of low-value alerts. Also mention alert fatigue: if everything is critical, nothing is critical. Key phrase: 'An alert without ownership and action is just noise.'",
+    "what_they_are_probing": "They are assessing whether you can design operational monitoring that teams actually use.",
+    "difficulty": "medium",
+    "tags": ["alerting", "observability", "ownership", "operations"]
+  },
+  {
+    "id": "best-practice-data-007",
+    "question": "What metrics would you track for pipeline performance and runtime regression?",
+    "answer_guidance": "A strong answer should track job duration, task duration, queue time, input data size, records processed per minute, shuffle size, spill to disk, bytes scanned, partitions scanned, output file count, and write duration. Explain that runtime should be compared to historical baselines, not only static thresholds. If a Spark job usually runs in 25 minutes and suddenly takes 2 hours, investigate input volume, skew, small files, shuffle, and write bottlenecks before increasing cluster size. For warehouses like Snowflake or BigQuery, monitor bytes scanned and query profile. Interviewers penalize blindly scaling compute as the first solution. Key phrase: 'Performance issues should be diagnosed before scaling compute.'",
+    "what_they_are_probing": "They want to see if you can debug performance systematically and avoid expensive guesswork.",
+    "difficulty": "medium",
+    "tags": ["performance", "spark", "runtime", "optimization"]
+  },
+  {
+    "id": "best-practice-data-008",
+    "question": "What should you monitor to control data platform cost?",
+    "answer_guidance": "A strong answer should say cost must be monitored by workload, pipeline, team, environment, and SLA tier. Track cluster or warehouse runtime, idle compute, over-sized compute, expensive queries, repeated full refreshes, backfills, BI refresh frequency, storage growth, small files, and data scanned per query. Explain that critical low-latency pipelines may deserve dedicated expensive compute, but low-priority analytics workloads should use shared or scheduled compute. Interviewers penalize generic cost-cutting like 'use smaller clusters' without considering SLA and workload behavior. A senior answer should mention cost attribution and dashboards for pipeline-level cost visibility. Key phrase: 'I optimize cost by workload and SLA, not by cutting compute everywhere.'",
+    "what_they_are_probing": "They are checking whether you treat cost as an architectural concern, not just a finance problem.",
+    "difficulty": "medium",
+    "tags": ["cost", "compute", "optimization", "sla"]
+  },
+  {
+    "id": "best-practice-data-009",
+    "question": "How should retries be designed in data pipelines?",
+    "answer_guidance": "A strong answer should distinguish transient failures from deterministic failures. Transient failures like API timeouts, temporary network issues, or warehouse unavailability can be retried with exponential backoff. Deterministic failures like schema breaks, missing mandatory columns, invalid data types, or failed business rules should not be retried forever; they should be quarantined and alerted. Track retry count, retry success rate, failed partitions, failed files, and dead-letter records. Interviewers penalize blind retries because they can hide incidents, waste compute, and overload upstream systems. Also mention idempotency: retries must not duplicate records or corrupt tables. Key phrase: 'Retry transient failures; quarantine deterministic bad data.'",
+    "what_they_are_probing": "They want to know if you can design failure handling without creating duplicate data or noisy operations.",
+    "difficulty": "medium",
+    "tags": ["retries", "failure-handling", "idempotency", "quarantine"]
+  },
+  {
+    "id": "best-practice-data-010",
+    "question": "What does idempotency mean in data engineering, and how would you design for it?",
+    "answer_guidance": "A strong answer should explain that idempotency means rerunning the same pipeline with the same input should produce the same final result without duplicates or corruption. For batch, design using deterministic batch IDs, partition overwrite, merge keys, and controlled reruns. For streaming, use checkpoints, event IDs, deduplication keys, and exactly-once-compatible sinks where possible. Store ingestion metadata so you know which files, offsets, or partitions were processed. Interviewers penalize saying only 'we use checkpoints' because checkpoints do not solve business-level duplicates by themselves. A senior answer should mention replay from raw or bronze layers. Key phrase: 'If the same data is processed twice, the final table should still be correct.'",
+    "what_they_are_probing": "They are assessing whether you understand reruns, retries, replay, and duplicate prevention.",
+    "difficulty": "medium",
+    "tags": ["idempotency", "replay", "deduplication", "batch"]
+  },
+  {
+    "id": "best-practice-data-012",
+    "question": "How would you monitor data lineage and downstream impact when a pipeline fails?",
+    "answer_guidance": "A strong answer should say that incident response starts with blast-radius analysis. Track upstream dependencies, downstream tables, dashboards, APIs, ML features, owners, SLAs, and consumers. If a silver table fails, you should quickly know which gold tables and dashboards are affected. Tools can include Unity Catalog lineage, dbt lineage, OpenLineage, DataHub, or custom metadata tables. Interviewers penalize investigating incidents manually by searching code and asking around. A senior answer should also mention impact-based alerting: failure of a table used by executives is more urgent than failure of an unused experimental table. Key phrase: 'Recovery starts with knowing the blast radius.'",
+    "what_they_are_probing": "They want to see if you can operate a data platform with dependency awareness and fast incident communication.",
+    "difficulty": "medium",
+    "tags": ["lineage", "impact-analysis", "incident-management", "metadata"]
+  },
+  {
+    "id": "best-practice-data-014",
+    "question": "How would you monitor data quality for finance or executive reporting pipelines?",
+    "answer_guidance": "A strong answer should emphasize stronger controls for high-risk reporting. Monitor freshness, completeness, reconciliation totals, exchange rate availability, duplicate business keys, missing mandatory dimensions, unexpected negative values, and KPI variance against previous periods. Add blocking checks before gold publication and include publication status in the dashboard. Keep audit metadata: source files, extraction timestamp, transformation version, and validation result. Interviewers penalize relying only on generic null checks for finance data. A senior answer should mention explainability: every number should be traceable back to source and transformation logic. Key phrase: 'For executive reporting, the dataset needs a stability and trust contract.'",
+    "what_they_are_probing": "They want to know if you can design monitoring for high-impact datasets where wrong numbers damage trust.",
+    "difficulty": "medium",
+    "tags": ["finance", "executive-reporting", "reconciliation", "trust"]
+  },
+  {
+    "id": "best-practice-data-015",
+    "question": "What should you monitor in API ingestion pipelines?",
+    "answer_guidance": "A strong answer should explain that API ingestion requires monitoring request state, not just output tables. Track request count, status codes, rate-limit responses, pagination progress, cursor state, retry count, response size, extraction duration, and partial failures. Store raw responses when possible and keep metadata about request parameters and timestamps. Monitor freshness and completeness per endpoint. Interviewers penalize treating APIs like simple batch files. APIs can fail partially, return empty pages, change schema, or throttle requests. A senior answer should mention backoff, replayability, and dead-letter queues for failed requests. Key phrase: 'For API ingestion, request state is part of the data architecture.'",
+    "what_they_are_probing": "They are assessing whether you understand the operational complexity of API-based data ingestion.",
+    "difficulty": "medium",
+    "tags": ["api-ingestion", "rate-limits", "pagination", "reliability"]
+  },
+  {
+    "id": "best-practice-data-016",
+    "question": "How would you monitor file-based ingestion from external partners?",
+    "answer_guidance": "A strong answer should mention a file control table. Track partner name, expected delivery time, actual arrival time, file name, file size, checksum, schema version, load status, rejected rows, duplicate files, and processing timestamp. Alert when expected files are missing, late, duplicated, empty, or malformed. Quarantine bad files instead of blocking unrelated partners. For daily gold tables, include completeness indicators so users know whether all partners were included. Interviewers penalize only monitoring whether the ingestion job ran. The job can run successfully even if a partner did not send a file. Key phrase: 'External partner ingestion needs a control table as much as it needs a data table.'",
+    "what_they_are_probing": "They are testing whether you can design reliable operations around messy external file delivery.",
+    "difficulty": "medium",
+    "tags": ["file-ingestion", "partners", "control-table", "quarantine"]
+  },
+  {
+    "id": "best-practice-data-018",
+    "question": "How would you monitor and manage backfills safely?",
+    "answer_guidance": "A strong answer should treat backfills as controlled production operations. Track date ranges, partitions processed, rows written, cost, runtime, failed partitions, validation status, and impact on daily workloads. Backfills should run on separate compute or lower-priority queues when possible, so they do not break daily SLAs. Write to staging or shadow tables first for large historical corrections, validate counts and aggregates, then promote. Interviewers penalize triggering huge backfills like normal daily runs. Also mention safeguards: explicit date ranges, approval for large backfills, and restartability by partition. Key phrase: 'Backfills should be explicit controlled operations, not accidental side effects of deployment.'",
+    "what_they_are_probing": "They are checking whether you can reprocess historical data without destabilizing production.",
+    "difficulty": "medium",
+    "tags": ["backfill", "reprocessing", "cost", "production"]
+  },
+  {
+    "id": "best-practice-data-019",
+    "question": "How would you design monitoring for data contracts between producers and consumers?",
+    "answer_guidance": "A strong answer should define contracts as enforceable rules, not documentation. Monitor schema, types, required fields, freshness, uniqueness, accepted values, semantic constraints, and compatibility changes. In CI, block breaking contract changes unless approved. At runtime, validate incoming data and route violations to quarantine or alerting. Track contract version, producer, consumer, owner, and last validation status. Interviewers penalize saying 'we document the schema' as if that is enough. A senior answer should connect contracts to deployment gates and runtime quality checks. Key phrase: 'A data contract is only useful if CI/CD and runtime validation enforce it.'",
+    "what_they_are_probing": "They want to know if you can operationalize producer-consumer reliability in a data platform.",
+    "difficulty": "medium",
+    "tags": ["data-contracts", "schema", "validation", "governance"]
+  },
+  {
+    "id": "best-practice-data-011",
+    "question": "How would you monitor late-arriving data in streaming or incremental pipelines?",
+    "answer_guidance": "A strong answer should distinguish event time from processing time. Track event-time delay, ingestion lag, watermark delay, percentage of late records, and records arriving after the allowed lateness window. Explain that some pipelines need correction logic for late data, especially dashboards or aggregates. For example, if most events arrive within 30 minutes but some arrive after 2 hours, the architecture should either update affected windows or route very late events to a correction pipeline. Interviewers penalize ignoring late data or using processing time as the only truth. Key phrase: 'Fresh data and final data are not always the same thing.'",
+    "what_they_are_probing": "They are checking whether you understand event-time processing and the operational impact of late data.",
+    "difficulty": "hard",
+    "tags": ["streaming", "late-data", "watermarking", "event-time"]
+  },
+  {
+    "id": "best-practice-data-017",
+    "question": "How would you monitor streaming pipelines in production?",
+    "answer_guidance": "A strong answer should include both stream-processing and data-quality metrics. Track consumer lag, input rate, processing rate, checkpoint health, failed micro-batches, state store size, watermark delay, late records, duplicate records, output rate, and end-to-end latency. Also monitor schema changes and poison messages that repeatedly fail processing. For business monitoring, track whether downstream tables or alerts are updated within SLA. Interviewers penalize only monitoring the streaming job status. A stream can be running but falling behind or producing stale output. Key phrase: 'A running stream is not necessarily a healthy stream.'",
+    "what_they_are_probing": "They want to see whether you understand streaming-specific operational risks like lag, state, checkpoints, and late events.",
+    "difficulty": "hard",
+    "tags": ["streaming", "consumer-lag", "checkpoints", "sla"]
+  }
+]
