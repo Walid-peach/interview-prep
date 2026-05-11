@@ -1154,7 +1154,7 @@ document.getElementById('btn-show-answer').addEventListener('click', () => {
   const { q } = currentQuestion;
   document.getElementById('btn-show-answer').classList.add('hidden');
   const body = document.getElementById('answer-body');
-  body.innerHTML = marked.parse(q.answer || '');
+  body.innerHTML = marked.parse(q.answer_guidance || q.answer || '');
   body.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
   document.getElementById('answer-section').classList.remove('hidden');
 });
@@ -1281,7 +1281,7 @@ function renderSearch(query) {
 
   const matches = allQuestions.filter(q =>
     q.question.toLowerCase().includes(query) ||
-    (q.answer || '').toLowerCase().includes(query) ||
+    (q.answer_guidance || q.answer || '').toLowerCase().includes(query) ||
     (q.tags  || []).some(t => t.toLowerCase().includes(query))
   );
 
