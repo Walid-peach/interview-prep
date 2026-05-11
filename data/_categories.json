@@ -58,5 +58,10 @@
     "id": "databricks",
     "name": "Databricks",
     "icon": "🧱"
+  },
+  {
+    "id": "snowflake",
+    "name": "Snowflake",
+    "icon": "❄️"
   }
 ]

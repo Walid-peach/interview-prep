@@ -1,0 +1,162 @@
+[
+  {
+    "id": "snowflake-001",
+    "question": "You need to migrate 50+ existing data pipelines from a lakehouse architecture into Snowflake. Some pipelines are batch, some are incremental, and business users cannot tolerate reporting downtime. How would you design the migration?",
+    "answer_guidance": "A strong answer should start with migration risk, not Snowflake features. Classify pipelines by business criticality, SLA, volume, and dependency graph. Build a parallel run strategy where Snowflake tables are produced side by side with the existing platform until parity is proven. Use stages for raw ingestion, Snowpipe or scheduled COPY INTO for file ingestion, Streams and Tasks for incremental transformations, and dbt if the team already uses SQL-based modeling. Validate row counts, aggregates, primary keys, null rates, and dashboard-level KPIs before cutover. Avoid a big-bang migration. Explain how you would migrate domain by domain or report by report, with rollback options. Interviewers penalize saying only 'I would use Snowpipe and dbt' without discussing validation and consumer cutover. Key phrase: 'I would migrate by business capability, not by table count.'",
+    "what_they_are_probing": "They are testing whether you can manage migration risk, data parity, and business continuity when introducing Snowflake.",
+    "difficulty": "medium",
+    "tags": ["migration", "snowflake", "validation", "cutover"]
+  },
+  {
+    "id": "snowflake-002",
+    "question": "You ingest 5 TB of files per day into Snowflake from S3. Some datasets need to be available in 30 minutes, others in 6 hours. Design the ingestion and transformation architecture.",
+    "answer_guidance": "A strong answer should classify workloads by SLA before choosing ingestion methods. For 30-minute datasets, use external stages on S3 with Snowpipe or Snowpipe Streaming when appropriate, plus monitoring on pipe lag and load history. For 6-hour datasets, scheduled COPY INTO through Tasks may be enough and can be cheaper. Raw data should land in a bronze-like raw schema, then be transformed into curated silver and gold schemas using dbt, Tasks, Dynamic Tables, or stored procedures depending on team standards. Add file-level metadata, load status, rejected record handling, and quarantine tables for bad files. Compute should be separated using different warehouses for ingestion, transformation, and BI workloads. Interviewers penalize treating all data as real-time or using one warehouse for everything. Key phrase: 'I would reserve continuous ingestion for SLA-critical datasets and use scheduled batch loading where latency allows it.'",
+    "what_they_are_probing": "They want to see if you can balance latency, cost, and reliability using Snowflake ingestion patterns.",
+    "difficulty": "medium",
+    "tags": ["ingestion", "snowpipe", "s3", "sla"]
+  },
+  {
+    "id": "snowflake-003",
+    "question": "A Snowflake warehouse used by dashboards suddenly became very expensive. Performance is good, but the monthly bill doubled. How would you investigate and optimize it?",
+    "answer_guidance": "A strong answer should treat cost like a production incident. Start by identifying which warehouses, users, queries, dashboards, and schedules drove the increase. Use query history, warehouse metering history, auto-suspend settings, clustering costs, and BI refresh patterns. Check if warehouses are oversized, running too long, or not auto-suspending. Look for inefficient queries, full table scans, unnecessary refreshes, duplicated BI extracts, and expensive transformations running on dashboard warehouses. Redesign by separating workloads: ingestion warehouse, transformation warehouse, BI warehouse, and ad hoc warehouse. Right-size each warehouse and use resource monitors. Interviewers penalize saying 'make the warehouse smaller' without understanding workload patterns. Key phrase: 'I would optimize Snowflake cost by workload behavior, not by blindly downsizing compute.'",
+    "what_they_are_probing": "They are assessing whether you understand Snowflake's compute billing model and can control cost without breaking performance.",
+    "difficulty": "medium",
+    "tags": ["cost", "warehouses", "optimization", "monitoring"]
+  },
+  {
+    "id": "snowflake-004",
+    "question": "You need to design a Snowflake data model for finance reporting across 18 countries and 12 currencies. How would you handle access control, currency conversion, and auditability?",
+    "answer_guidance": "A strong answer should lead with finance constraints: correctness, auditability, access governance, and currency consistency. Raw finance data and exchange rates should land in immutable raw tables with ingestion metadata. Curated tables should apply validated business rules and exchange rates using effective dates. Gold tables should expose certified KPIs for reporting. For governance, use roles, grants, masking policies, row access policies, and possibly secure views so users only see authorized countries or business units. Add reconciliation checks, load history, and data quality rules for missing exchange rates or abnormal values. Interviewers penalize building only the reporting table without audit trail or access rules. Key phrase: 'For finance, the design must explain every number: source, transformation, exchange rate, and access rule.'",
+    "what_they_are_probing": "They are checking whether you can design Snowflake for sensitive financial reporting, not just analytics convenience.",
+    "difficulty": "medium",
+    "tags": ["finance", "governance", "rls", "auditability"]
+  },
+  {
+    "id": "snowflake-005",
+    "question": "You receive partner files daily, but some are late, duplicated, or have schema changes. The business needs a trusted Snowflake gold table by 8 AM. How would you design the pipeline?",
+    "answer_guidance": "A strong answer should focus on control tables and failure isolation. Every file should be tracked with partner name, file name, checksum, arrival time, schema version, load status, and rejection reason. Use stages and COPY INTO or Snowpipe to load raw data, but do not promote directly to gold. Validate schema and data quality in raw or staging schemas, route bad files to quarantine tables, and deduplicate using file hashes or business keys. Define a cutoff policy for late partners: either publish with completeness indicators or delay affected datasets only. Gold tables should include freshness and completeness metadata so users know whether the 8 AM dataset is certified. Interviewers penalize letting one bad partner block the entire platform or ignoring late-file policy. Key phrase: 'The file control table is the operational backbone of partner ingestion.'",
+    "what_they_are_probing": "They are testing whether you can design robust Snowflake ingestion for unreliable external files.",
+    "difficulty": "medium",
+    "tags": ["file-ingestion", "quarantine", "data-quality", "partner-data"]
+  },
+  {
+    "id": "snowflake-006",
+    "question": "You need to implement CDC from PostgreSQL into Snowflake. Tables include inserts, updates, and deletes, and reporting needs a 15-minute SLA. How would you design it?",
+    "answer_guidance": "A strong answer should explain CDC semantics before tools. Capture changes from PostgreSQL using a CDC tool such as Debezium, Fivetran, or another connector, preserving operation type, source timestamp, transaction order, and primary key. Land raw change events in Snowflake first. Then use Streams and Tasks, MERGE statements, or dbt incremental models to reconstruct the latest table state in curated schemas. Deletes must be handled explicitly as hard deletes or soft-delete flags depending on reporting requirements. For a 15-minute SLA, isolate critical tables with dedicated warehouses and monitoring on ingestion lag. Interviewers penalize treating CDC like append-only ingestion. Key phrase: 'CDC into Snowflake is about reconstructing state correctly, not just loading change rows.'",
+    "what_they_are_probing": "They are assessing whether you understand CDC ordering, deletes, idempotency, and incremental state management in Snowflake.",
+    "difficulty": "hard",
+    "tags": ["cdc", "postgresql", "streams", "merge"]
+  },
+  {
+    "id": "snowflake-007",
+    "question": "A dbt incremental model on Snowflake normally runs in 20 minutes, but now takes 2 hours. Nothing changed in the SQL. How do you investigate?",
+    "answer_guidance": "A strong answer should start with diagnosis. Check whether input volume increased, the incremental predicate stopped pruning data, clustering became ineffective, a join became skewed, upstream duplicates increased, or the warehouse changed. Use Snowflake query profile to inspect scan volume, partitions scanned, joins, spills, and execution time. Check dbt artifacts and run history to see whether the model accidentally performed a full refresh. Then optimize by fixing incremental filters, clustering keys if justified, query logic, warehouse sizing, or upstream deduplication. Interviewers penalize saying 'increase warehouse size' as the first response. Key phrase: 'I would first compare bytes scanned and partitions pruned before changing compute size.'",
+    "what_they_are_probing": "They want to know if you can debug Snowflake performance systematically using query profile and incremental model behavior.",
+    "difficulty": "medium",
+    "tags": ["dbt", "performance", "incremental", "query-profile"]
+  },
+  {
+    "id": "snowflake-008",
+    "question": "You need to design Snowflake environments for dev, staging, and production. The team uses GitHub Actions and Terraform. How would you structure deployment and governance?",
+    "answer_guidance": "A strong answer should separate infrastructure, code, and data promotion. Use Terraform for Snowflake account-level objects such as roles, warehouses, databases, schemas, grants, stages, integrations, and resource monitors. Use GitHub Actions to run SQL linting, dbt compile, dbt tests, and deployments to dev/staging/prod with approvals. Keep environment-specific variables for warehouses, databases, storage integrations, and secrets. Production should require review and controlled deployment. Use least-privilege roles and avoid manual grants outside Terraform where possible. Interviewers penalize relying on manual Snowflake UI changes or using the same database for every environment. Key phrase: 'Terraform controls the platform objects; CI/CD controls the transformation lifecycle.'",
+    "what_they_are_probing": "They are checking whether you can industrialize Snowflake with infrastructure-as-code, CI/CD, and clean environment separation.",
+    "difficulty": "medium",
+    "tags": ["terraform", "cicd", "github-actions", "governance"]
+  },
+  {
+    "id": "snowflake-009",
+    "question": "You need to expose Snowflake data to Power BI for executive dashboards. How would you design the serving layer so dashboards are fast, stable, and governed?",
+    "answer_guidance": "A strong answer should distinguish curated serving tables from raw data access. Create gold tables or secure views specifically designed for dashboard consumption, with stable metric definitions and access policies. Use row access policies or secure views for country or department-level restrictions. Optimize performance through proper modeling, pre-aggregations where needed, materialized views or Dynamic Tables if justified, and appropriate warehouse sizing. Separate BI workloads onto a dedicated warehouse with auto-suspend and resource monitoring. Add freshness timestamps and publication status so executives know when data is official. Interviewers penalize connecting Power BI directly to raw operational tables. Key phrase: 'Executive dashboards should read certified serving tables, not unstable transformation layers.'",
+    "what_they_are_probing": "They are assessing whether you can design a governed and performant BI serving layer on Snowflake.",
+    "difficulty": "medium",
+    "tags": ["power-bi", "serving-layer", "governance", "dashboards"]
+  },
+  {
+    "id": "snowflake-010",
+    "question": "You need to ingest semi-structured JSON data into Snowflake. The schema evolves often, and analysts need reliable relational tables. How would you design the pipeline?",
+    "answer_guidance": "A strong answer should separate raw flexibility from curated structure. Land JSON into raw tables using VARIANT columns, preserving file metadata and ingestion timestamp. Allow the raw layer to absorb schema evolution, but do not expose raw semi-structured complexity directly to most analysts. Build curated views or tables that extract stable fields, cast types, validate required attributes, and quarantine malformed records. Track schema changes and alert when critical fields disappear or change type. For frequently queried JSON paths, materialize extracted columns for performance. Interviewers penalize flattening everything immediately without preserving the original payload. They also penalize giving analysts only raw VARIANT fields. Key phrase: 'VARIANT gives flexibility in raw, but the curated layer still needs a stable relational contract.'",
+    "what_they_are_probing": "They want to know if you can handle schema evolution and semi-structured data without sacrificing usability and data quality.",
+    "difficulty": "medium",
+    "tags": ["json", "variant", "schema-evolution", "semi-structured"]
+  },
+  {
+    "id": "snowflake-011",
+    "question": "You need to design row-level security in Snowflake for country-based access. Users from France should only see France, UK users only UK, and global finance users should see all countries. How would you implement it?",
+    "answer_guidance": "A strong answer should use role-based design and avoid duplicating tables. Create a mapping table that links roles or users to authorized countries. Use Snowflake row access policies on curated tables or secure views. Global finance roles can be mapped to all countries or handled through a privileged role. Manage grants through Terraform or a controlled access workflow. Test access with representative users and include audit queries to verify policy behavior. Explain that row-level security should be implemented close to the data layer so all consumers, including BI tools, inherit the same rules. Interviewers penalize creating separate tables per country or implementing security only inside Power BI. Key phrase: 'The access rule should live in Snowflake so every downstream tool inherits the same governance.'",
+    "what_they_are_probing": "They are testing whether you understand scalable access-control design using Snowflake row access policies and roles.",
+    "difficulty": "medium",
+    "tags": ["row-level-security", "roles", "governance", "access-control"]
+  },
+  {
+    "id": "snowflake-012",
+    "question": "You need to design a Snowflake data sharing solution for external partners. Some partners need row-level data, others only aggregated KPIs. How would you design it?",
+    "answer_guidance": "A strong answer should start with partner contracts and sensitivity. Create partner-specific curated schemas or secure views, never sharing raw tables directly. Use Snowflake Secure Data Sharing where possible, or controlled exports if partners are not on Snowflake. Apply masking policies, row access policies, aggregation rules, and audit logging. For partners who only need KPIs, expose aggregated gold tables with no sensitive row-level data. For row-level partners, enforce contractual filters and column restrictions. Include versioning and data contract documentation. Interviewers penalize giving partners direct access to internal production schemas. Key phrase: 'External sharing should expose a contracted data product, not our internal data model.'",
+    "what_they_are_probing": "They are checking whether you can design secure external data products using Snowflake sharing and governance features.",
+    "difficulty": "medium",
+    "tags": ["data-sharing", "secure-views", "partners", "governance"]
+  },
+  {
+    "id": "snowflake-013",
+    "question": "A Snowflake table has grown to 30 TB. Queries filter mostly by event_date, country, and customer_id. How would you improve query performance?",
+    "answer_guidance": "A strong answer should first inspect query patterns and pruning before choosing optimizations. Snowflake automatically manages micro-partitions, so you do not manually partition like in Spark. Check query profile for partitions scanned and bytes scanned. If filters on event_date and country are common and pruning is poor, consider clustering keys, but only if query benefits justify clustering maintenance cost. Avoid clustering on very high-cardinality fields like customer_id unless access patterns prove it helps. Create aggregates or materialized views for repeated dashboard patterns. Also review SQL logic, selected columns, and warehouse size. Interviewers penalize applying Spark-style partitioning concepts directly to Snowflake. Key phrase: 'In Snowflake, I optimize around micro-partition pruning and workload patterns, not manual file partitions.'",
+    "what_they_are_probing": "They want to see if you understand Snowflake storage architecture, pruning, clustering trade-offs, and query profile analysis.",
+    "difficulty": "hard",
+    "tags": ["performance", "clustering", "micro-partitions", "query-profile"]
+  },
+  {
+    "id": "snowflake-014",
+    "question": "You need to design a data quality framework in Snowflake. Some checks should block publication, others should only warn. How would you structure it?",
+    "answer_guidance": "A strong answer should classify quality checks by severity and business risk. Blocking checks might include missing primary keys, invalid currencies, failed reconciliation totals, or unauthorized nulls in finance data. Warning checks might include small volume deviations or optional field changes. Implement checks through dbt tests, custom SQL checks, Tasks, stored procedures, or a data quality tool. Store results in an audit table with dataset, check name, severity, status, timestamp, and failed records. Use quarantine tables for bad records and prevent promotion to gold when blocking checks fail. Interviewers penalize treating all checks equally or only checking technical null counts. Key phrase: 'The quality framework should control promotion, not just produce reports after bad data is published.'",
+    "what_they_are_probing": "They are assessing whether you can design data quality as an operational control inside Snowflake pipelines.",
+    "difficulty": "medium",
+    "tags": ["data-quality", "dbt-tests", "quarantine", "governance"]
+  },
+  {
+    "id": "snowflake-015",
+    "question": "You need near-real-time ingestion into Snowflake from Kafka or Redpanda. The business wants data visible in under 2 minutes. How would you design it?",
+    "answer_guidance": "A strong answer should begin with latency and operational constraints. If sub-2-minute visibility is required, consider Snowpipe Streaming, Kafka connector patterns, or a streaming processor that writes micro-batches into Snowflake. Land raw events with metadata such as topic, partition, offset, event timestamp, and ingestion timestamp. Use staging or raw tables first, then transform into curated tables with Streams and Tasks, Dynamic Tables, or dbt jobs depending on required latency. Add deduplication based on event ID or topic-partition-offset, plus monitoring for lag. Mention that Snowflake can support near-real-time analytics, but it may not be the right serving store for ultra-low-latency operational reads. Interviewers penalize ignoring consumer lag, duplicates, and replay. Key phrase: 'I would design for replayability first, then optimize the ingestion path to meet the two-minute SLA.'",
+    "what_they_are_probing": "They want to know if you can connect streaming systems to Snowflake while handling latency, replay, and deduplication.",
+    "difficulty": "hard",
+    "tags": ["streaming", "kafka", "snowpipe-streaming", "latency"]
+  },
+  {
+    "id": "snowflake-016",
+    "question": "You have to choose between Snowflake Tasks, Airflow, and dbt Cloud jobs for orchestration. How would you decide?",
+    "answer_guidance": "A strong answer should avoid saying one is always best. Snowflake Tasks are useful for simple in-platform scheduling, especially with Streams or Dynamic Tables. Airflow is better when orchestration spans multiple systems: APIs, file movement, external services, Databricks, dbt, notifications, and complex dependencies. dbt Cloud jobs are strong when transformation lifecycle and dbt testing/deployment are central. In a mature platform, these can coexist: Airflow orchestrates end-to-end workflows, dbt manages transformation logic, and Snowflake Tasks handle lightweight internal dependencies. Interviewers penalize tool preference without criteria. Key phrase: 'I choose orchestration based on dependency boundaries: inside Snowflake, Tasks can work; across systems, Airflow is usually the control plane.'",
+    "what_they_are_probing": "They are assessing your ability to choose orchestration tools based on workflow complexity and system boundaries.",
+    "difficulty": "medium",
+    "tags": ["orchestration", "airflow", "dbt", "tasks"]
+  },
+  {
+    "id": "snowflake-017",
+    "question": "You need to design a Snowflake solution for GDPR deletion requests. User data exists in raw, curated, gold, and shared datasets. How would you handle it?",
+    "answer_guidance": "A strong answer should explain that deletion is a lineage and governance problem. First identify subject identifiers and map where personal data exists across raw, silver, gold, and shared datasets. Maintain metadata or lineage to trace affected tables. For mutable tables, apply deletes or anonymization. For aggregates, assess whether data is truly anonymized and non-reversible. For shared datasets, propagate deletion or restrict future sharing depending on contracts. Keep an audit log of the request, tables affected, actions taken, and completion status. Consider retention policies, Time Travel, Fail-safe implications, and compliance/legal guidance. Interviewers penalize saying only 'run delete from every table.' Key phrase: 'A privacy deletion workflow needs traceability, execution, and audit proof, not just SQL deletes.'",
+    "what_they_are_probing": "They are testing whether you understand privacy operations, lineage, and Snowflake data lifecycle implications.",
+    "difficulty": "hard",
+    "tags": ["gdpr", "privacy", "lineage", "governance"]
+  },
+  {
+    "id": "snowflake-018",
+    "question": "A team wants to use Snowflake as both a raw data lake and analytics warehouse. What architecture would you propose?",
+    "answer_guidance": "A strong answer should propose clear zones and contracts. Use databases or schemas to separate raw, staging, curated, and marts/gold. Raw tables preserve original data and metadata, often with minimal transformation. Staging standardizes types and naming. Curated models enforce business rules and quality. Marts serve BI and analytics. Use separate warehouses for ingestion, transformation, BI, and ad hoc workloads. Add governance with roles, masking, row access policies, and controlled promotion between zones. Explain that Snowflake can support lakehouse-like patterns, but raw flexibility should not leak into business-facing layers. Interviewers penalize putting everything in one schema or exposing raw tables as official reporting. Key phrase: 'The architecture can be lakehouse-inspired, but each zone needs a clear contract and consumer expectation.'",
+    "what_they_are_probing": "They are checking whether you can structure Snowflake as a governed platform rather than a collection of tables.",
+    "difficulty": "medium",
+    "tags": ["architecture", "lakehouse", "schemas", "governance"]
+  },
+  {
+    "id": "snowflake-019",
+    "question": "You need to load data from multiple clouds into Snowflake: AWS S3, GCS, and Azure Blob. How would you design the ingestion layer?",
+    "answer_guidance": "A strong answer should start with cloud-specific integration and standardization. Define external stages for each storage system, with secure storage integrations and least-privilege access. Standardize file naming, metadata capture, schema versioning, and load status across all clouds. Use Snowpipe or scheduled COPY INTO depending on SLA. Normalize raw tables into a common ingestion contract so downstream transformations do not care whether data came from S3, GCS, or Azure Blob. Add monitoring for load failures, late files, and duplicate files. Interviewers penalize creating three completely different ingestion patterns unless the SLA demands it. Key phrase: 'The storage integrations are cloud-specific, but the ingestion contract should be platform-standard.'",
+    "what_they_are_probing": "They are assessing whether you can design consistent multi-cloud ingestion while respecting each cloud's security model.",
+    "difficulty": "medium",
+    "tags": ["multi-cloud", "stages", "ingestion", "storage-integration"]
+  },
+  {
+    "id": "snowflake-020",
+    "question": "You need to prepare for a Snowflake system design interview. The interviewer asks: 'Why Snowflake instead of Databricks or BigQuery?' How would you answer as a senior data engineer?",
+    "answer_guidance": "A strong answer should avoid tool wars. Start by saying the choice depends on workload, team skills, governance needs, ecosystem, cost model, and existing cloud context. Snowflake is strong for managed SQL analytics, separation of compute and storage, concurrency, data sharing, governance, and BI workloads. Databricks may be stronger when the platform is Spark-heavy, ML-heavy, notebook-driven, or needs complex distributed processing. BigQuery may fit naturally in GCP-native analytics with serverless operations. A senior answer should say when Snowflake is a good choice and when it is not. Interviewers penalize claiming one platform is universally better. Key phrase: 'I choose the platform based on workload fit and operating model, not brand preference.'",
+    "what_they_are_probing": "They are assessing whether you can compare platforms objectively and make context-aware architecture decisions.",
+    "difficulty": "medium",
+    "tags": ["platform-choice", "snowflake", "databricks", "bigquery"]
+  }
+]
