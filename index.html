@@ -95,7 +95,10 @@
       text-transform: uppercase;
       color: var(--text-faint);
       margin-bottom: 10px;
+      cursor: pointer;
+      user-select: none;
     }
+    #sidebar-title:hover { color: var(--text-muted); }
 
     #practice-row {
       display: flex;
@@ -645,6 +648,14 @@ function initTheme() {
   applyTheme(prefersDark ? 'dark' : 'light');
 }
 
+document.getElementById('sidebar-title').addEventListener('click', () => {
+  currentCatId = null;
+  renderSidebar();
+  renderWelcome();
+  showView('welcome');
+  closeSidebar();
+});
+
 document.getElementById('btn-theme').addEventListener('click', () => {
   const current = document.documentElement.getAttribute('data-theme');
   const next = current === 'dark' ? 'light' : 'dark';
@@ -824,9 +835,7 @@ document.querySelectorAll('.rate-btn').forEach(btn => {
     if (!currentQuestion) return;
     const { q, catId, backView } = currentQuestion;
     const raw = btn.dataset.status;
-    const status = raw === 'gotit' ? 'shaky' : raw; // "got it" maps to shaky+ progress
-    // Actually: gotit = intermediate, mastered = mastered. Let's store gotit as "gotit" not shaky.
-    setProgress(q.id, raw === 'gotit' ? 'shaky' : raw === 'shaky' ? 'shaky' : 'mastered');
+    setProgress(q.id, raw === 'mastered' ? 'mastered' : 'shaky');
 
     renderSidebar();
     if (backView === 'practice') {
@@ -928,7 +937,7 @@ function showPracticeQuestion() {
   document.querySelectorAll('#practice-rate-buttons .rate-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const raw = btn.className.includes('mastered') ? 'mastered' : 'shaky';
-      setProgress(q.id, raw);
+      setProgress(q.id, raw); // gotit and shaky both save as shaky
       renderSidebar();
       practiceQueueIndex++;
       showPracticeQuestion();
